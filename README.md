@@ -2,6 +2,8 @@
 
 > *Fiska ska vara lätt, in på SardiNet*
 
+---
+
 ## Group Project (Stockholm University)
 
 This project was developed collaboratively as part of a university course assignment at Stockholm University.
@@ -17,6 +19,8 @@ This project was developed collaboratively as part of a university course assign
 Additional project work was completed by other team members covering areas such as frontend UI design (MudBlazor, including wireframes, low-fidelity, and high-fidelity prototypes), backend server logic (.NET Aspire), database schema creation and data population, core Google Maps API integration, and coordination of overall user acceptance testing.
 
 Project documentation and report writing were completed collaboratively by all team members.
+
+---
 
 ## 🌟 Höjdpunkter
 
@@ -35,6 +39,8 @@ Fiska ska vara lätt, in på SardiNet 😎👍
 ### ✍️ Författare
 
 Abhinash Arudchelvan, Isabelle Johansson, Karin Nezar Mustafa, Oscar Ringqvist, Sibel Demirkiran, Simon Lundmark, Sofie Edström, Viktor Brane
+
+---
 
 ## 🚀 Användning
 
@@ -55,6 +61,8 @@ cd PVT15_8.Mudweb
 dotnet watch
 ```
 
+---
+
 ## ⬇️ Installation
 
 1. Installera [Docker Desktop](https://www.docker.com/products/docker-desktop/)
@@ -70,6 +78,8 @@ aspire cli powershell
 ```powershell
 irm https://aspire.dev/install.ps1 | iex
 ```
+
+---
 
 ## 💭 Feedback
 
