@@ -2,8 +2,6 @@
 
 > *Fiska ska vara lätt, in på SardiNet*
 
-**Live Demo:** https://sardinet.monimon.org
-
 ## Group Project (Stockholm University)
 
 This project was developed collaboratively as part of a university course assignment at Stockholm University.
