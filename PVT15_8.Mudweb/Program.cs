@@ -31,7 +31,7 @@ builder.Services.AddScoped<RecommendationApiClient>();
 builder.Services.AddScoped<ProfileService>();
 builder.Services.AddScoped<MediaApiClient>();
 
-builder.Services.AddBlazorGoogleMaps("AIzaSyCGSpV4qQJQQH1CVHfAuLn-qSs1F8YljxU");
+builder.Services.AddBlazorGoogleMaps(builder.Configuration["GoogleMaps:ApiKey"]);
 
 builder.Services.AddAuthorizationCore();
 builder.Services.AddCascadingAuthenticationState();
