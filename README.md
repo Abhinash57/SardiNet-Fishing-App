@@ -12,6 +12,7 @@ This project was developed collaboratively as part of a university course assign
 - SMHI Weather API integration for real-time weather forecasts
 - Frontend implementation for map interactions (popups, detailed views for fishing spots)
 - Development of fish details pages with database connectivity
+- Development of the "Log Catch" feature (photo uploads, species/weight logging, community feed, user profile, and delete functionality)
 - Writing test scripts for system validation and integration testing (collaboratively with another team member)
 - Implementation of Agile/Scrum methodology and sprint planning
 - Conducted observation interviews and usability testing during the development phase to identify and resolve user interface faults (collaborative team effort)
