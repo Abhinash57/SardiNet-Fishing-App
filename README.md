@@ -2,7 +2,7 @@
 
 > *Fiska ska vara lätt, in på SardiNet*
 
-https://sardinet.monimon.org
+**Live Demo:** https://sardinet.monimon.org
 
 ## Group Project (Stockholm University)
 
