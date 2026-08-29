@@ -1,0 +1,25 @@
+﻿@inherits LayoutComponentBase
+
+<MudLayout>
+    <AuthorizeView>
+        <Authorized>
+            <NavMenuTop />
+            
+            <MudMainContent Class="pb-16">
+                @Body
+            </MudMainContent>
+            
+            <NavMenu />
+        </Authorized>
+        <NotAuthorized>
+            <MudMainContent Class="pb-0 pt-0">
+                @Body
+            </MudMainContent>
+        </NotAuthorized>
+    </AuthorizeView>
+</MudLayout>
+
+<MudThemeProvider />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />

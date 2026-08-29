@@ -1,0 +1,72 @@
+@using PVT15_8.Shared.DTOs
+@using MudBlazor
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Välj fiskarter</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudSelect T="SpeciesWrapper" 
+                   Label="Välj arter" 
+                   MultiSelection="true" 
+                   Variant="Variant.Outlined" 
+                   FullWidth="true"
+                   Placeholder="Välj en eller flera arter"
+                   @bind-SelectedValues="_selectedWrappers">
+            @foreach (var species in SpeciesList)
+            {
+                <MudSelectItem Value="new SpeciesWrapper(species.Id, species.Name)">@species.Name</MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Avbryt</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Save">Spara</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    public class SpeciesWrapper
+    {
+        public int Id { get; }
+        public string Name { get; }
+
+        public SpeciesWrapper(int id, string name)
+        {
+            Id = id;
+            Name = name;
+        }
+
+        public override string ToString() => Name;
+
+        public override bool Equals(object? obj) => obj is SpeciesWrapper other && Id == other.Id;
+        public override int GetHashCode() => Id.GetHashCode();
+    }
+
+    [CascadingParameter] 
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] 
+    public List<FishSpeciesDTO> SpeciesList { get; set; } = new();
+
+    [Parameter] 
+    public List<int> SelectedIds { get; set; } = new();
+
+    private IReadOnlyCollection<SpeciesWrapper> _selectedWrappers = new HashSet<SpeciesWrapper>();
+
+    protected override void OnInitialized()
+    {
+        _selectedWrappers = new HashSet<SpeciesWrapper>(
+            SpeciesList.Where(s => SelectedIds.Contains(s.Id))
+                       .Select(s => new SpeciesWrapper(s.Id, s.Name))
+        );
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void Save()
+    {
+        var selectedIds = _selectedWrappers.Select(w => w.Id).ToList();
+        MudDialog.Close(DialogResult.Ok(selectedIds));
+    }
+}

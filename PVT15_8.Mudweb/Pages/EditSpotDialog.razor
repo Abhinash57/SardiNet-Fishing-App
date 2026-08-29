@@ -1,0 +1,44 @@
+@using PVT15_8.Shared.DTOs
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField Label="Name" @bind-Value="EditedSpot.Name" />
+        <MudNumericField T="double" Label="Latitude" @bind-Value="EditedSpot.Latitude" />
+        <MudNumericField T="double" Label="Longitude" @bind-Value="EditedSpot.Longitude" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Success" OnClick="Save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public FishingSpotMarkerDTO Spot { get; set; } = default!;
+
+    private FishingSpotMarkerDTO EditedSpot = new();
+
+    protected override void OnInitialized()
+    {
+        EditedSpot = new FishingSpotMarkerDTO
+        {
+            Name = Spot.Name,
+            Latitude = Spot.Latitude,
+            Longitude = Spot.Longitude
+        };
+    }
+
+    private void Save()
+    {
+        MudDialog.Close(DialogResult.Ok(EditedSpot));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}

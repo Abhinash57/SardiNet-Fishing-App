@@ -1,0 +1,262 @@
+﻿@page "/recommendation"
+@using PVT15_8.Shared.DTOs
+@using System.Globalization
+@inject RecommendationApiClient RecommendationApiClient
+@inject WeatherApiClient WeatherApiClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@attribute [Authorize]
+
+<PageTitle>Rekommendationer</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="mt-2 mb-md-6">
+
+    <MudText Typo="Typo.h5" Class="mb-4 font-weight-bold">Dina Rekommendationer</MudText>
+
+    @if (_loading)
+    {
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="mt-8">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Typo="Typo.body1" Class="mt-2">Hittar de bästa platserna...</MudText>
+        </MudStack>
+    }
+    else if (_fishingSpots.Any())
+    {
+        <MudStack Spacing="4">
+            @foreach (var spot in _fishingSpots)
+            {
+                <MudPaper Class="pa-4 rounded-lg" Elevation="2">
+                    
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                        <MudText Typo="Typo.h6" Style="line-height: 1.2;">@spot.Name</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
+                                       Href="@($"fishingSpot/{spot.Id}")"
+                                       Size="Size.Medium"
+                                       Color="Color.Default" />
+                    </MudStack>
+
+                    <a href="fishingSpot/@spot.Id">
+                        <MudImage Src="profil-bakgrund2.avif" Alt="Fiskeplats bild" Elevation="3" Class="rounded-lg mb-3" Fluid="true" Style="width: 100%; height: 220px; object-fit: cover;">
+                        </MudImage>
+                    </a>
+
+                    @if (spot.IsForbidden)
+                    {
+                        <MudAlert Severity="Severity.Error" Dense Class="mb-2">Fiske förbjudet.</MudAlert>
+                    }
+                    else
+                    {
+                        @if (spot.HasRules)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense Variant="Variant.Outlined" Class="mb-2 py-0">
+                                Särskilda regler gäller.
+                            </MudAlert>
+                        }
+                        @if (spot.IsFishingCardRequired)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense Variant="Variant.Outlined" Class="mb-2 py-0">
+                                Fiskekort krävs.
+                            </MudAlert>
+                        }
+                    }
+
+                    <MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Spacing="3" Class="mt-2">
+                        
+                        <div class="d-flex align-center gap-1">
+                            <MudIcon Icon="@Icons.Material.Filled.Star" Color="Color.Warning" Size="Size.Small" />
+                            <MudText Typo="Typo.body2" Style="font-weight: 600;">@spot.AverageRating / 5</MudText>
+                        </div>
+
+                        @if (!_locationError)
+                        {
+                            <div class="d-flex align-center gap-1">
+                                <MudIcon Icon="@Icons.Material.Filled.DirectionsWalk" Size="Size.Small" Color="Color.Default" />
+                                <MudText Typo="Typo.body2">@(Math.Round(spot.DistanceFromUserMeters / 1000, 2)) km</MudText>
+                            </div>
+                        }
+
+                        <MudSpacer />
+
+                        <div class="d-flex align-center gap-2 cursor-pointer" @onclick="() => NavigateToWeather(spot)">
+                            @if (_weatherLoadingDict.TryGetValue(spot.Id, out var isWeatherLoading) && isWeatherLoading)
+                            {
+                                <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+                            }
+                            else if (_weatherDict.TryGetValue(spot.Id, out var weather) && weather?.Forecasts?.FirstOrDefault() is { } forecast)
+                            {
+                                <MudText Typo="Typo.body2" Style="font-weight: 600;">@forecast.TemperatureC °C</MudText>
+                                <MudIcon Icon="@GetWeatherIcon(forecast.SymbolCode)" Color="@GetWeatherColor(forecast.SymbolCode)" Size="Size.Small" />
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">Inget väder</MudText>
+                            }
+                        </div>
+                    </MudStack>
+
+                    <MudDivider Class="my-3" />
+
+                    @if (spot.FishSpecies?.Any() == true)
+                    {
+                        <MudText Typo="Typo.caption" Style="font-weight: 600; color: #666;">Fiskarter</MudText>
+                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1 mb-2">
+                            @foreach (var fish in spot.FishSpecies.OrderByDescending(fs => fs.Frequency))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="@GetFrequencyColor(fish.Frequency)" Variant="Variant.Outlined" Style="font-size: 0.75rem; height: 24px;">
+                                    @fish.Name
+                                </MudChip>
+                            }
+                        </MudStack>
+                    }
+
+                    @if (spot.RecommendedLures?.Any() == true)
+                    {
+                        <MudText Typo="Typo.caption" Style="font-weight: 600; color: #666;">Beten</MudText>
+                        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
+                            @foreach (var lure in spot.RecommendedLures.Take(4))
+                            {
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Style="font-size: 0.7rem; height: 22px;">
+                                    @lure.Name
+                                </MudChip>
+                            }
+                            @if (spot.RecommendedLures.Count > 4)
+                            {
+                                <MudText Typo="Typo.caption" Class="align-self-center ml-1">+@(spot.RecommendedLures.Count - 4)</MudText>
+                            }
+                        </MudStack>
+                    }
+
+                </MudPaper>
+            }
+        </MudStack>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Warning" Variant="Variant.Filled" Class="mt-4">
+            Vi kunde tyvärr inte hitta några fiskeplatser just nu.
+        </MudAlert>
+    }
+</MudContainer>
+
+@code {
+    private bool _loading = true;
+    private bool _locationError = true;
+    
+    private IEnumerable<FishingSpotDTO> _fishingSpots = [];
+    private Dictionary<int, WeatherResultDto> _weatherDict = new();
+    private Dictionary<int, bool> _weatherLoadingDict = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var loc = await JS.InvokeAsync<LocationResult>("getBrowserLocation");
+            _locationError = false;
+            await GetNearbyLocationsAsync(loc);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Plats nekad eller misslyckades: {ex.Message}");
+            _locationError = true;
+            await GetRandomLocationsAsync();
+        }
+    }
+
+    private async Task GetNearbyLocationsAsync(LocationResult loc)
+    {
+        var spots = await RecommendationApiClient.GetNerabyFishingSpotAsync(loc.Longitude, loc.Latitude, take: 5);
+        await HandleSpotsResultAsync(spots);
+    }
+
+    private async Task GetRandomLocationsAsync()
+    {
+        var spots = await RecommendationApiClient.GetRandomFishingSpotAsync(take: 5);
+        await HandleSpotsResultAsync(spots);
+    }
+
+    private async Task HandleSpotsResultAsync(IEnumerable<FishingSpotDTO>? spots)
+    {
+        if (spots != null && spots.Any())
+        {
+            _fishingSpots = spots;
+            _loading = false;
+            StateHasChanged();
+
+            var weatherTasks = _fishingSpots.Select(async spot =>
+            {
+                _weatherLoadingDict[spot.Id] = true;
+                StateHasChanged();
+
+                var fetchedWeather = await WeatherApiClient.GetSmhiForecastAsync(spot.Longitude, spot.Latitude);
+                if (fetchedWeather != null)
+                {
+                    _weatherDict[spot.Id] = fetchedWeather;
+                }
+
+                _weatherLoadingDict[spot.Id] = false;
+                StateHasChanged();
+            });
+
+            await Task.WhenAll(weatherTasks);
+        }
+        else
+        {
+            _loading = false;
+        }
+    }
+
+    private void NavigateToWeather(FishingSpotDTO spot)
+    {
+        var latStr = spot.Latitude.ToString(CultureInfo.InvariantCulture);
+        var lonStr = spot.Longitude.ToString(CultureInfo.InvariantCulture);
+        Navigation.NavigateTo($"/Weather?lat={latStr}&lon={lonStr}");
+    }
+
+    private string GetWeatherIcon(int? smhiSymbolCode)
+    {
+        return smhiSymbolCode switch
+        {
+            >= 1 and <= 3 => Icons.Material.Filled.WbSunny,
+            >= 4 and <= 7 => Icons.Material.Filled.Cloud,
+            >= 8 and <= 10 => Icons.Material.Filled.WaterDrop,
+            11 => Icons.Material.Filled.Thunderstorm,
+            >= 12 and <= 17 => Icons.Material.Filled.AcUnit,
+            >= 18 and <= 20 => Icons.Material.Filled.WaterDrop,
+            21 => Icons.Material.Filled.Thunderstorm,
+            >= 22 and <= 27 => Icons.Material.Filled.AcUnit,
+            _ => Icons.Material.Filled.QuestionMark
+        };
+    }
+
+    private Color GetWeatherColor(int? smhiSymbolCode)
+    {
+        return smhiSymbolCode switch
+        {
+            >= 1 and <= 3 => Color.Warning,
+            >= 4 and <= 7 => Color.Default,
+            >= 8 and <= 10 => Color.Info,
+            11 => Color.Default,
+            >= 12 and <= 20 => Color.Info,
+            21 => Color.Default,
+            >= 22 and <= 27 => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    private Color GetFrequencyColor(FishSpeciesFrequency frequency)
+    {
+        return frequency switch
+        {
+            FishSpeciesFrequency.Low => Color.Error,
+            FishSpeciesFrequency.Medium => Color.Warning,
+            FishSpeciesFrequency.High => Color.Success,
+            _ => Color.Default
+        };
+    }
+
+    public class LocationResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+}

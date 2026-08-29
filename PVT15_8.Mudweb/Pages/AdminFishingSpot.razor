@@ -1,0 +1,148 @@
+@page "/admin/map/{Id:int}"
+@using PVT15_8.Shared.DTOs
+@attribute [Authorize(Roles = "Admin")]
+@inject AdminService AdminService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<MudLayout>
+    <NavMenuTop />
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4">
+            <MudPaper Elevation="3" Class="pa-4">
+                <MudText Typo="Typo.h5" GutterBottom="true">Edit Fishing Spot</MudText>
+
+                @if (Spot is null)
+                {
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                }
+                else
+                {
+                    <MudForm @ref="form" IsValid="@isValid">
+                        <MudGrid>
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="Spot.Name"
+                                              Label="Name"
+                                              Required="true"
+                                              RequiredError="Name is required!"
+                                              Variant="Variant.Outlined" />
+                            </MudItem>
+
+                            <MudItem xs="12">
+                                <MudTextField @bind-Value="Spot.Description"
+                                              Label="Description"
+                                              Lines="3"
+                                              Variant="Variant.Outlined" />
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudNumericField @bind-Value="Spot.Depth"
+                                                 Label="Depth (m)"
+                                                 Variant="Variant.Outlined"
+                                                 Step="0.1" />
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudNumericField @bind-Value="Spot.Latitude"
+                                                 Label="Latitude"
+                                                 Required="true"
+                                                 Variant="Variant.Outlined"
+                                                 Step="0.000001" />
+                            </MudItem>
+
+                            <MudItem xs="12" sm="4">
+                                <MudNumericField @bind-Value="Spot.Longitude"
+                                                 Label="Longitude"
+                                                 Required="true"
+                                                 Variant="Variant.Outlined"
+                                                 Step="0.000001" />
+                            </MudItem>
+
+                            <MudItem xs="12">
+                                <MudText Typo="Typo.subtitle2" Class="mb-2">Additional Settings</MudText>
+                                <MudCheckBox @bind-Value="Spot.HasRules"
+                                             Label="Has Rules"
+                                             Color="Color.Primary" />
+                                <MudCheckBox @bind-Value="Spot.IsFishingCardRequired"
+                                             Label="Fishing Card Required"
+                                             Color="Color.Primary" />
+                                <MudCheckBox @bind-Value="Spot.IsForbidden"
+                                             Label="Unknown Third Option"
+                                             Color="Color.Primary" />
+                            </MudItem>
+
+                            <MudItem xs="12" Class="d-flex justify-space-between mt-4">
+                                <MudButton Variant="Variant.Text"
+                                           Color="Color.Secondary"
+                                           OnClick="GoBack">Cancel</MudButton>
+                                <MudButton Variant="Variant.Filled"
+                                           Color="Color.Primary"
+                                           OnClick="SaveChanges">Save Changes</MudButton>
+                            </MudItem>
+                        </MudGrid>
+                    </MudForm>
+                }
+            </MudPaper>
+        </MudContainer>
+    </MudMainContent>
+    <NavMenu />
+</MudLayout>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    public FishingSpotDTO? Spot { get; set; }
+
+    private MudForm? form;
+    private bool isValid;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Spot = await AdminService.GetFishingSpotByIdAsync(Id);
+
+        if (Spot == null)
+        {
+            Snackbar.Add("Fishing spot not found.", Severity.Error);
+            NavigationManager.NavigateTo("/admin/fishingspots");
+            return;
+        }
+    }
+
+    private async Task SaveChanges()
+    {
+        if (form is null || Spot is null) return;
+        
+        await form.ValidateAsync();
+        if (!form.IsValid) return;
+
+        var requestModel = new RequestFishingSpotDTO
+        {
+            Name = Spot.Name,
+            Description = Spot.Description,
+            Depth = Spot.Depth,
+            Latitude = Spot.Latitude,
+            Longitude = Spot.Longitude,
+            HasRules = Spot.HasRules,
+            IsFishingCardRequired = Spot.IsFishingCardRequired,
+            IsForbidden = Spot.IsForbidden
+        };
+
+        var success = await AdminService.PutFishingSpotAsync(Id, requestModel);
+
+        if (success)
+        {
+            Snackbar.Add("Fishing spot updated successfully!", Severity.Success);
+            @* NavigationManager.NavigateTo("/admin/fishingspots"); *@
+        }
+        else
+        {
+            Snackbar.Add("Failed to update fishing spot.", Severity.Error);
+        }
+    }
+
+    private void GoBack()
+    {
+        NavigationManager.NavigateTo("/admin/fishingspots");
+    }
+}

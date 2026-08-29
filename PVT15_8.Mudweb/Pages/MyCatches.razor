@@ -1,0 +1,263 @@
+@page "/my-catches"
+@using PVT15_8.Shared.DTOs
+@using System.Net.Http.Json
+@using System.Security.Claims
+@using MudBlazor
+@inject IHttpClientFactory HttpClientFactory
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime Js
+@inject NavigationManager Navigation
+
+<PageTitle>Mina fångster</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="my-8" Style="padding-bottom: 80px;">
+    <MudText Typo="Typo.h4" GutterBottom="true" Class="mb-6">🐟 Mina fångster</MudText>
+
+    @if (loading)
+    {
+        <div class="d-flex justify-center my-8">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+        </div>
+    }
+    else if (myCatches == null || !myCatches.Any())
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">Du har inga inlagda fångster än.</MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var catchReport in myCatches)
+            {
+                <MudItem xs="12">
+                    <MudCard Elevation="3" Class="rounded-lg">
+                        @if (!string.IsNullOrEmpty(catchReport.ImageUrl))
+                        {
+                            <MudCardMedia Image="@catchReport.ImageUrl" Height="200" Style="background-size: cover; background-position: center;" />
+                        }
+                        else
+                        {
+                            <div class="d-flex justify-center align-center mud-theme-dark pa-8" style="height: 200px;">
+                                <MudIcon Icon="@Icons.Material.Filled.ImageNotSupported" Size="Size.Large" />
+                            </div>
+                        }
+                        
+                        <MudCardContent>
+                            <MudText Typo="Typo.h6">@catchReport.FishSpeciesName</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+                                <MudIcon Icon="@Icons.Material.Filled.Place" Size="Size.Small" Class="mr-1" />@catchReport.FishingSpotName
+                            </MudText>
+                            
+                            <MudDivider Class="my-2" />
+                            
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mt-2">
+                                <MudText Typo="Typo.body2"><b>Datum:</b> @catchReport.CatchDate.ToLocalTime().ToString("yyyy-MM-dd")</MudText>
+                                @if (catchReport.WeightKg > 0)
+                                {
+                                    <MudText Typo="Typo.body2"><b>Vikt:</b> @catchReport.WeightKg kg</MudText>
+                                }
+                            </MudStack>
+                            
+                            <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                @if (!string.IsNullOrEmpty(catchReport.FishingLureName))
+                                {
+                                    <MudText Typo="Typo.body2"><b>Bete:</b> @catchReport.FishingLureName</MudText>
+                                }
+                                @if (catchReport.LengthCm > 0)
+                                {
+                                    <MudText Typo="Typo.body2"><b>Längd:</b> @catchReport.LengthCm cm</MudText>
+                                }
+                            </MudStack>
+
+                            @if (!string.IsNullOrEmpty(catchReport.Description))
+                            {
+                                <MudText Typo="Typo.body2" Class="mt-2" Style="font-style: italic;">"@catchReport.Description"</MudText>
+                            }
+                        </MudCardContent>
+
+                        <MudCardActions Class="d-flex justify-end">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => StartEdit(catchReport))" aria-label="Redigera" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteCatch(catchReport.Id))" aria-label="Ta bort" />
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</MudContainer>
+
+<MudDialog @bind-Visible="isEditing" Options="dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" /> Redigera fångst
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (editingCatch != null)
+        {
+            <MudForm @ref="editForm">
+                <MudGrid>
+                    <MudItem xs="12" Class="d-flex justify-center">
+                        @if (!string.IsNullOrEmpty(editingCatch.ImageUrl))
+                        {
+                            <MudImage Src="@editingCatch.ImageUrl" Height="150" ObjectFit="ObjectFit.Cover" Class="rounded" />
+                        }
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.body2"><b>Fiskart:</b> @editingCatch.FishSpeciesName</MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudText Typo="Typo.body2"><b>Plats:</b> @editingCatch.FishingSpotName</MudText>
+                    </MudItem>
+                    
+                    @if (!string.IsNullOrEmpty(editingCatch.FishingLureName))
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2"><b>Bete:</b> @editingCatch.FishingLureName (@editingCatch.FishingLureType)</MudText>
+                        </MudItem>
+                    }
+                    
+                    <MudItem xs="12">
+                        <MudTextField Label="Beskrivning" @bind-Value="editingCatch.Description" Lines="3" Variant="Variant.Outlined" FullWidth="true" />
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="CancelEdit">Avbryt</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveEdit">Spara ändringar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private List<CatchReportDTO>? myCatches;
+    private bool loading = true;
+    private string? currentUserId;
+    
+    private bool isEditing = false;
+    private CatchReportDTO? editingCatch;
+    private MudForm? editForm;
+    private readonly DialogOptions dialogOptions = new() { FullWidth = true, MaxWidth = MaxWidth.Small, CloseButton = true, Position = DialogPosition.Center };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCurrentUserId();
+        await LoadCatches();
+        loading = false;
+    }
+
+    private async Task LoadCurrentUserId()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        currentUserId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user.Identity?.Name;
+    }
+
+    private async Task LoadCatches()
+    {
+        var gatewayClient = HttpClientFactory.CreateClient("GatewayClient");
+        var allCatches = await gatewayClient.GetFromJsonAsync<List<CatchReportDTO>>("/api/catchreports");
+        
+        if (allCatches != null && !string.IsNullOrEmpty(currentUserId))
+        {
+            myCatches = allCatches.Where(c => c.UserId == currentUserId).ToList();
+        }
+        else
+        {
+            myCatches = new List<CatchReportDTO>();
+        }
+    }
+
+    private void StartEdit(CatchReportDTO catchReport)
+    {
+        editingCatch = new CatchReportDTO
+        {
+            Id = catchReport.Id,
+            UserId = catchReport.UserId,
+            FishSpeciesId = catchReport.FishSpeciesId,
+            FishSpeciesName = catchReport.FishSpeciesName,
+            FishingSpotId = catchReport.FishingSpotId,
+            FishingSpotName = catchReport.FishingSpotName,
+            FishingLureId = catchReport.FishingLureId,
+            FishingLureName = catchReport.FishingLureName,
+            FishingLureType = catchReport.FishingLureType,
+            CatchDate = catchReport.CatchDate,
+            WeightKg = catchReport.WeightKg,
+            LengthCm = catchReport.LengthCm,
+            Description = catchReport.Description,
+            ImageUrl = catchReport.ImageUrl
+        };
+        isEditing = true;
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+        editingCatch = null;
+    }
+
+    private async Task SaveEdit()
+    {
+        if (editingCatch == null) return;
+
+        try
+        {
+            var gatewayClient = HttpClientFactory.CreateClient("GatewayClient");
+            var response = await gatewayClient.PutAsJsonAsync($"/api/catchreports/{editingCatch.Id}", editingCatch);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                isEditing = false;
+                await LoadCatches();
+                Snackbar.Add("Fångsten uppdaterades", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add("Kunde inte uppdatera fångsten", Severity.Error);
+            }
+        }
+        catch
+        {
+            Snackbar.Add("Ett fel uppstod", Severity.Error);
+        }
+    }
+
+    private async Task DeleteCatch(int id)
+    {
+        bool? result = await DialogService.ShowMessageBoxAsync(
+            "Ta bort fångst",
+            "Är du säker på att du vill ta bort denna fångst? Det går inte att ångra.",
+            yesText: "Ja, ta bort", cancelText: "Avbryt");
+            
+        if (result != true) return;
+
+        try
+        {
+            var gatewayClient = HttpClientFactory.CreateClient("GatewayClient");
+            var request = new HttpRequestMessage(HttpMethod.Delete, $"/api/catchreports/{id}");
+            
+            if (!string.IsNullOrEmpty(currentUserId))
+            {
+                request.Headers.Add("User_id", currentUserId);
+            }
+            
+            var response = await gatewayClient.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadCatches();
+                Snackbar.Add("Fångsten togs bort", Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add("Kunde inte ta bort fångsten", Severity.Error);
+            }
+        }
+        catch
+        {
+            Snackbar.Add("Ett fel uppstod", Severity.Error);
+        }
+    }
+}

@@ -1,0 +1,54 @@
+@page "/FishSearch"
+@attribute [Authorize]
+<PageTitle>Sök fiskart</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="mt-8">
+    <MudPaper Elevation="4" Class="pa-4">
+        <MudItem>
+            <MudAutocomplete T="Fish"
+                             Label="Fiskart"
+                             SearchFunc="@Search"
+                             @bind-Value="selectedFish" ToStringFunc="@(f => f?.Name)"
+                             AdornmentIcon="@Icons.Material.Filled.Search" AdornmentColor="Color.Dark" />
+        </MudItem>
+    </MudPaper>
+</MudContainer>
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="mt-4">
+    @if (selectedFish != null)
+    {
+        <MudCard Class="mt-4">
+        </MudCard>
+        <MudPaper Elevation="4" Class="pa-4">
+            <MudCardContent>
+                <MudText Typo="Typo.h6">@selectedFish.Name</MudText>
+                <MudText>@selectedFish.Description</MudText>
+            </MudCardContent>
+        </MudPaper>
+    }
+</MudContainer>
+
+@code {
+    
+    private Fish selectedFish;
+    private List<Fish> fishList = new List<Fish>
+    {
+        new Fish { Name = "Lax", Description = "Rätt god." },
+        new Fish { Name = "Mört", Description = "Ja tack." },
+        new Fish { Name = "Tonfisk", Description = "Rätt dryg." },
+        new Fish { Name = "Torsk", Description = "Rätt oskön." },
+        new Fish { Name = "Gädda", Description = "Asnajs." },
+        new Fish { Name = "Abborre", Description = "Shit i pannkakan vilken firre." },
+        new Fish { Name = "Haj", Description = "Vassa tänder och sånt" },
+        new Fish { Name = "Sill", Description = "Silly goose." }
+    };
+    private async Task<IEnumerable<Fish>> Search(string value, CancellationToken token)
+    {
+        await Task.Delay(5, token);
+        return fishList.Where(x => x.Name.Contains(value, StringComparison.InvariantCultureIgnoreCase));
+    }
+    public class Fish
+    {
+        public string Name { get; set; }
+        public string Description { get; set; }
+    }
+}

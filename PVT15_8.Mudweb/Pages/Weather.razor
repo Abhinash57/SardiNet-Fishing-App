@@ -1,0 +1,267 @@
+@page "/Weather"
+@using System.Globalization
+@using MudBlazor
+@using PVT15_8.Shared.DTOs
+@inject IJSRuntime JS
+@inject WeatherApiClient WeatherApi
+@attribute [Authorize]
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="my-4">
+    <MudPaper Elevation="0" Class="pa-4">
+
+        <div style="display: flex; align-items: center; gap: 4px;">
+            <MudTextField @bind-Value="cityName" Variant="Variant.Outlined" FullWidth="true" OnKeyUp="@HandleKeyUp"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search" OnAdornmentClick="FetchByCity">
+            </MudTextField>
+            <MudIconButton Icon="@Icons.Material.Filled.MyLocation" OnClick="@GetBrowserLocation" Disabled="@loading">
+            </MudIconButton>
+        </div>
+
+        @if (loading)
+        {
+            <MudGrid Justify="Justify.Center">
+                <MudItem xs="12" Class="d-flex flex-column align-center">
+                    <MudProgressCircular Indeterminate="true" Color="Color.Primary" Size="Size.Large" />
+                    <MudText Align="Align.Center" Class="mt-2">Hämtar väder...</MudText>
+                </MudItem>
+            </MudGrid>
+        }
+        else if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mt-4">
+                @errorMessage
+            </MudAlert>
+        }
+        else if (weatherResult != null)
+        {
+            <div style="display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;">
+                <div></div>
+                <div>
+                    <MudText Typo="Typo.h4" Align="Align.Center" Class="mt-3" Style="margin-bottom: 20%;     ">
+                        @weatherResult.LocationName
+                    </MudText>
+                    <MudText Typo="Typo.h2" Align="Align.Center">@weatherResult.Forecasts.First().TemperatureC°C</MudText>
+                </div>
+                <div style="display: flex; justify-content: center;">
+                    <MudIcon Icon="@GetWeatherIcon(@weatherResult.Forecasts.First().SymbolCode)"
+                             Color="@GetWeatherColor(@weatherResult.Forecasts.First().SymbolCode)" Size="Size.Large" />
+                </div>
+            </div>
+
+            
+            <div style="display: flex; flex-direction: column; align-items:left; margin-bottom: 20%; ">
+                <MudText Class="pa-4" Style="border-bottom: 1px solid #ccc">Känns som
+                    @(weatherResult.Forecasts.First().TemperatureC - 2)°C</MudText>
+
+                    <MudText Class="pa-4" Style="border-bottom: 1px solid #ccc">Vind
+                        @weatherResult.Forecasts.First().WindSpeedMps m/s</MudText>
+                    </div>
+
+                    <MudExpansionPanels Class="mt-4" MultiSelection="false">
+                        @foreach (var dayGroup in GroupedForecasts)
+                        {
+                            <MudExpansionPanel>
+                                <TitleContent>
+                                    <div style="display: flex; justify-content: space-between; width: 100%; ">
+                                        <span>@dayGroup.Key.ToString("dddd d MMMM", new CultureInfo("sv-SE"))</span>
+                                        <span style="font-weight: bold;">@dayGroup.Value.First().TemperatureC°C /
+                                            @dayGroup.Value.Last().TemperatureC°C</span>
+                                        </div>
+                                    </TitleContent>
+                                    <ChildContent>
+                                        @foreach (var forecast in dayGroup.Value)
+                                        {
+                                            string timeDisplay = "Okänd tid";
+                                            if (DateTime.TryParse(forecast.Time, out var parsedTime))
+                                            {
+                                                var localTime = parsedTime.ToLocalTime();
+                                                timeDisplay = localTime.ToString("HH:mm");
+                                            }
+
+                                            <div
+                                                style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee;">
+                                                <div style="width: 80px;">@timeDisplay</div>
+                                                <div style="width: 50px;">@forecast.TemperatureC°C</div>
+                                                <div style="width: 70px;">💨 @forecast.WindSpeedMps m/s</div>
+                                                <div style="width: 80px;">🌧️ @forecast.PrecipMmh.ToString("0.0") mm/h</div>
+                                            </div>
+                                            @* <MudPaper Class="pa-2 mt-1 mb-2" Elevation="0"
+                                                      Style="background-color: #f0fff0; border-left: 4px solid #2e7d32;">
+                                                <MudText Typo="Typo.body2" Style="color: #2d5a27;">
+                                                    @forecast.FishingAdvice
+                                                </MudText>
+                                            </MudPaper> *@
+                                        }
+                                    </ChildContent>
+                                </MudExpansionPanel>
+                            }
+                        </MudExpansionPanels>
+                    }
+                </MudPaper>
+            </MudContainer>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "lat")]
+    public double? lat { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "lon")]
+    public double? lon { get; set; }
+
+    private string cityName = "";
+    private WeatherResultDto? weatherResult;
+    private bool loading = false;
+    private string? errorMessage;
+
+    private Dictionary<DateTime, List<WeatherForecastDto>> GroupedForecasts
+    {
+        get
+        {
+            if (weatherResult?.Forecasts == null)
+                return new Dictionary<DateTime, List<WeatherForecastDto>>();
+
+            var validForecasts = weatherResult.Forecasts
+                .Where(f => !string.IsNullOrEmpty(f.Time))
+                .Select(f => new { Forecast = f, Parsed = DateTime.TryParse(f.Time, out var dt) ? dt : (DateTime?)null })
+                .Where(x => x.Parsed.HasValue)
+                .Select(x => new { x.Forecast, Date = x.Parsed.Value.ToLocalTime().Date })
+                .GroupBy(x => x.Date)
+                .ToDictionary(g => g.Key, g => g.Select(x => x.Forecast).ToList());
+
+            return validForecasts;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            if (lat.HasValue && lon.HasValue)
+            {
+                await FetchByCoordinates(lat.Value, lon.Value);
+            }
+            else
+            {
+                await Task.Delay(500);
+                await GetBrowserLocation();
+            }
+        }
+    }
+
+    private async Task FetchByCoordinates(double latitude, double longitude)
+    {
+        loading = true;
+        errorMessage = null;
+        weatherResult = null;
+        StateHasChanged();
+
+        try
+        {
+            weatherResult = await WeatherApi.GetSmhiForecastAsync(longitude, latitude);
+            
+            if (weatherResult != null)
+            {
+                cityName = weatherResult.LocationName ?? "";
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"FULL ERROR: {ex}");
+            errorMessage = ex.InnerException?.Message ?? ex.Message;
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task GetBrowserLocation()
+    {
+        try
+        {
+            var loc = await JS.InvokeAsync<LocationResult>("getBrowserLocation");
+            await FetchByCoordinates(loc.Latitude, loc.Longitude);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"FULL ERROR: {ex}");
+            errorMessage = "Kunde inte hämta din plats.";
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task FetchByCity()
+    {
+        if (string.IsNullOrWhiteSpace(cityName) || cityName.Trim().Length < 3)
+        {
+            errorMessage = "Vänligen ange ett giltigt platsnamn.";
+            return;
+        }
+
+        loading = true;
+        errorMessage = null;
+        weatherResult = null;
+        StateHasChanged();
+
+        try
+        {
+            weatherResult = await WeatherApi.GetSmhiForecastByCityAsync(cityName);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"FULL ERROR: {ex}");
+            errorMessage = ex.InnerException?.Message ?? ex.Message;
+        }
+        finally
+        {
+            loading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task HandleKeyUp(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !loading)
+            await FetchByCity();
+    }
+
+    private string GetWeatherIcon(int? smhiSymbolCode)
+    {
+        return smhiSymbolCode switch
+        {
+            >= 1 and <= 3 => Icons.Material.Filled.WbSunny,
+            >= 4 and <= 7 => Icons.Material.Filled.Cloud,
+            >= 8 and <= 10 => Icons.Material.Filled.WaterDrop,
+            11 => Icons.Material.Filled.Thunderstorm,
+            >= 12 and <= 17 => Icons.Material.Filled.AcUnit,
+            >= 18 and <= 20 => Icons.Material.Filled.WaterDrop,
+            21 => Icons.Material.Filled.Thunderstorm,
+            >= 22 and <= 27 => Icons.Material.Filled.AcUnit,
+            _ => Icons.Material.Filled.QuestionMark
+        };
+    }
+
+    private Color GetWeatherColor(int? smhiSymbolCode)
+    {
+        return smhiSymbolCode switch
+        {
+            >= 1 and <= 3 => Color.Warning,
+            >= 4 and <= 7 => Color.Default,
+            >= 8 and <= 10 => Color.Info,
+            11 => Color.Default,
+            >= 12 and <= 20 => Color.Info,
+            21 => Color.Default,
+            >= 22 and <= 27 => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    public class LocationResult
+    {
+        public double Latitude { get; set; }
+        public double Longitude { get; set; }
+    }
+}

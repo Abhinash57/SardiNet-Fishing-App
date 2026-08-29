@@ -1,0 +1,222 @@
+@page "/admin/lures"
+@using PVT15_8.Shared.DTOs
+@attribute [Authorize(Roles = "Admin")]
+@inject AdminService AdminService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Manage Fishing Lures</MudText>
+
+    @if (isLoading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        @if (isEditing)
+        {
+            <MudPaper Elevation="3" Class="pa-4 mb-4">
+                <MudText Typo="Typo.h6">@(editingId == 0 ? "Add New Lure" : "Edit Lure")</MudText>
+                <MudForm @ref="form" IsValid="@isValid">
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="lureModel.Name" Label="Name" Required="true" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="lureModel.Type" Label="Type" Required="true" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudSelect T="int" Label="Target Fish Species" MultiSelection="true" @bind-SelectedValues="selectedSpeciesIds" Variant="Variant.Outlined">
+                                @foreach (var species in availableSpecies)
+                                {
+                                    <MudSelectItem T="int" Value="@species.Id">@species.Name</MudSelectItem>
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <!-- Image upload -->
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">Lure Image</MudText>
+                            <div class="d-flex gap-2 align-center">
+                                <MudButton Variant="Variant.Outlined" OnClick="UploadImage">Upload Image</MudButton>
+                                @if (!string.IsNullOrEmpty(lureModel.ImageBase64))
+                                {
+                                    <MudImage Src="@($"data:image/jpeg;base64,{lureModel.ImageBase64}")" Height="80" Width="80" Style="object-fit: cover; border-radius: 8px;" />
+                                    <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="RemoveImage">Remove</MudButton>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption">No image selected</MudText>
+                                }
+                            </div>
+                        </MudItem>
+                        <MudItem xs="12" Class="d-flex justify-end gap-2">
+                            <MudButton Variant="Variant.Text" OnClick="CancelEdit">Cancel</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Save</MudButton>
+                        </MudItem>
+                    </MudGrid>
+                </MudForm>
+            </MudPaper>
+        }
+
+        <MudTable Items="@lures" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@isLoading">
+            <ToolBarContent>
+                <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Add" OnClick="AddNew">Add Lure</MudButton>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>ID</MudTh>
+                <MudTh>Image</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="ID">@context.Id</MudTd>
+                <MudTd DataLabel="Image">
+                    @if (!string.IsNullOrEmpty(context.ImageUrl))
+                    {
+                        <MudImage Src="@($"data:image/jpeg;base64,{context.ImageUrl}")" Height="50" Width="50" Style="object-fit: cover; border-radius: 4px;" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Image" Color="Color.Default" Size="Size.Small" />
+                    }
+                </MudTd>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Type">@context.Type</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => Edit(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteAsync(context.Id))" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    private bool isLoading = true;
+    private bool isEditing = false;
+    private bool isValid;
+    private MudForm? form;
+    private DotNetObjectReference<AdminFishingLures>? dotNetRef;
+
+    private List<FishingLureDTO> lures = [];
+    private List<FishSpeciesDTO> availableSpecies = [];
+
+    private int editingId = 0;
+    private LureViewModel lureModel = new();
+    private IReadOnlyCollection<int> selectedSpeciesIds = new HashSet<int>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        dotNetRef = DotNetObjectReference.Create(this);
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        isLoading = true;
+        var luresTask = AdminService.GetFishingLuresAsync();
+        var speciesTask = AdminService.GetFishSpeciesAsync();
+        await Task.WhenAll(luresTask, speciesTask);
+        lures = luresTask.Result ?? [];
+        availableSpecies = speciesTask.Result ?? [];
+        isLoading = false;
+    }
+
+    private void AddNew()
+    {
+        editingId = 0;
+        lureModel = new LureViewModel();
+        selectedSpeciesIds = new HashSet<int>();
+        isEditing = true;
+    }
+
+    private void Edit(FishingLureDTO lure)
+    {
+        editingId = lure.Id;
+        lureModel = new LureViewModel
+        {
+            Name = lure.Name,
+            Type = lure.Type ?? string.Empty,
+            ImageBase64 = lure.ImageUrl
+        };
+        selectedSpeciesIds = new HashSet<int>(lure.Species.Select(s => s.Id));
+        isEditing = true;
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+    }
+
+    private async Task UploadImage()
+    {
+        await JSRuntime.InvokeVoidAsync("cameraHelper.chooseFromGallery", dotNetRef);
+    }
+
+    [JSInvokable]
+    public void OnImageSelected(string base64Data, string fileName, string contentType)
+    {
+        lureModel.ImageBase64 = base64Data;
+        StateHasChanged();
+    }
+
+    private void RemoveImage()
+    {
+        lureModel.ImageBase64 = null;
+        StateHasChanged();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (form is null) return;
+        await form.ValidateAsync();
+        if (!form.IsValid) return;
+
+        var request = new RequestFishingLureDTO
+        {
+            Name = lureModel.Name,
+            Type = lureModel.Type,
+            FishSpeciesIds = selectedSpeciesIds.ToList(),
+            ImageUrl = lureModel.ImageBase64
+        };
+
+        bool isNew = editingId == 0;
+        bool success = isNew
+            ? await AdminService.PostFishingLureAsync(request)
+            : await AdminService.PutFishingLureAsync(editingId, request);
+
+        if (success)
+        {
+            Snackbar.Add(isNew ? "Lure created successfully" : "Lure updated successfully", Severity.Success);
+            isEditing = false;
+            await LoadDataAsync();
+        }
+        else
+        {
+            Snackbar.Add(isNew ? "Failed to create lure" : "Failed to update lure", Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        var success = await AdminService.DeleteFishingLureAsync(id);
+        if (success)
+        {
+            Snackbar.Add("Lure deleted successfully", Severity.Info);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete lure", Severity.Error);
+        }
+        await LoadDataAsync();
+    }
+
+    private class LureViewModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;
+        public string? ImageBase64 { get; set; }
+    }
+}

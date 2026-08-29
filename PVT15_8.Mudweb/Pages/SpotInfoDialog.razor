@@ -1,0 +1,134 @@
+@using PVT15_8.Shared.DTOs
+@using MudBlazor
+@inject WeatherApiClient WeatherApi
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6" Style="font-weight: 600;">@Spot.Name</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="2">
+            @if (!string.IsNullOrWhiteSpace(Spot.Description))
+            {
+                <MudText Typo="Typo.body2" Style="color: #4a5568; line-height: 1.5;">@Spot.Description</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Style="color: #a0aec0; font-style: italic;">Ingen beskrivning tillagd.</MudText>
+            }
+
+            @if (Spot.Depth.HasValue)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.WaterDrop" Size="Size.Small" Color="Color.Info" />
+                    <MudText Typo="Typo.body2"><b>Djup:</b> @Spot.Depth m</MudText>
+                </MudStack>
+            }
+
+            @if (_weatherLoading)
+            {
+                <MudStack AlignItems="AlignItems.Center" Class="mt-2">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+                    <MudText Typo="Typo.caption" Class="mt-1">Hämtar väder...</MudText>
+                </MudStack>
+            }
+            else if (_weatherResult != null)
+            {
+                var forecast = _weatherResult.Forecasts.FirstOrDefault();
+                if (forecast != null)
+                {
+                    <MudDivider />
+                    <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">Väder</MudText>
+                    <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@GetWeatherIcon(forecast.SymbolCode)" Size="Size.Medium" Color="@GetWeatherColor(forecast.SymbolCode)" />
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.body2"><b>@forecast.TemperatureC°C</b> (känns som @(forecast.TemperatureC - 2)°C)</MudText>
+                            <MudText Typo="Typo.caption">💨 @forecast.WindSpeedMps m/s</MudText>
+                        </MudStack>
+                    </MudStack>
+                }
+            }
+            else if (!string.IsNullOrEmpty(_weatherError))
+            {
+                <MudAlert Severity="Severity.Warning" Dense>Kunde inte hämta väder</MudAlert>
+            }
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Cancel">Stäng</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GoToDetails" StartIcon="@Icons.Material.Filled.Info">Läs mer</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] 
+    public FishingSpotDTO Spot { get; set; } = default!;
+
+    private WeatherResultDto? _weatherResult;
+    private bool _weatherLoading = true;
+    private string? _weatherError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await FetchWeather();
+    }
+
+    private async Task FetchWeather()
+    {
+        try
+        {
+            _weatherResult = await WeatherApi.GetSmhiForecastAsync(Spot.Longitude, Spot.Latitude);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Weather error: {ex.Message}");
+            _weatherError = ex.Message;
+        }
+        finally
+        {
+            _weatherLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetWeatherIcon(int? smhiSymbolCode)
+    {
+        return smhiSymbolCode switch
+        {
+            >= 1 and <= 3 => Icons.Material.Filled.WbSunny,
+            >= 4 and <= 7 => Icons.Material.Filled.Cloud,
+            >= 8 and <= 10 => Icons.Material.Filled.WaterDrop,
+            11 => Icons.Material.Filled.Thunderstorm,
+            >= 12 and <= 17 => Icons.Material.Filled.AcUnit,
+            >= 18 and <= 20 => Icons.Material.Filled.WaterDrop,
+            21 => Icons.Material.Filled.Thunderstorm,
+            >= 22 and <= 27 => Icons.Material.Filled.AcUnit,
+            _ => Icons.Material.Filled.QuestionMark
+        };
+    }
+
+    private Color GetWeatherColor(int? smhiSymbolCode)
+    {
+        return smhiSymbolCode switch
+        {
+            >= 1 and <= 3 => Color.Warning,
+            >= 4 and <= 7 => Color.Default,
+            >= 8 and <= 10 => Color.Info,
+            11 => Color.Default,
+            >= 12 and <= 20 => Color.Info,
+            21 => Color.Default,
+            >= 22 and <= 27 => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private void GoToDetails()
+    {
+        MudDialog.Close(DialogResult.Ok(Spot.Id));
+    }
+}

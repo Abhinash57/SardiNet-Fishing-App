@@ -1,0 +1,229 @@
+@page "/FishList"
+@attribute [Authorize]
+@using PVT15_8.Shared.DTOs
+@using Microsoft.AspNetCore.Components.Web
+@inject AdminService AdminService
+@inject IDialogService DialogService
+
+<PageTitle>Fiskarter</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="my-4">
+    <div class="top-bar">
+            <MudTextField @bind-Value="searchTerm"
+                          Placeholder="Sök efter fisk..."
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Immediate="true"
+                          Variant="Variant.Outlined"
+                          Class="search-input"
+                          OnKeyUp="OnSearchKeyUp" />
+        <div class="filter-container">
+            <MudMenu Icon="@Icons.Material.Filled.FilterAlt"
+                     Size="Size.Large"
+                     Class="filter-menu-button"
+                     AnchorOrigin="Origin.BottomLeft"
+                     TransformOrigin="Origin.TopLeft">
+                <MudMenuItem OnClick="() => SetFilter(FilterAll)">Alla fiskar</MudMenuItem>
+                <MudMenuItem OnClick="() => SetFilter(FilterPredator)">Rovfisk</MudMenuItem>
+                <MudMenuItem OnClick="() => SetFilter(FilterPrey)">Vitfisk / karpfisk</MudMenuItem>
+                <MudMenuItem OnClick="() => SetFilter(FilterOther)">Övriga</MudMenuItem>
+            </MudMenu>
+        </div>
+    </div>
+
+    <div style="height: auto; overflow-y: auto; margin-top: 20px;">
+        <MudStack AlignItems="AlignItems.Center" Spacing="3">
+            @foreach (var fish in filteredFish)
+            {
+                var isExpanded = expandedFishId == fish.Id;
+                var cardClass = (filteredFish.IndexOf(fish) % 2 == 0) ? "card-even" : "card-odd";
+                var imgSrc = string.IsNullOrEmpty(fish.ImageUrl) ? defaultImageUrl : fish.ImageUrl;
+
+                <MudItem xs="12" Style="width: 100%;">
+                    <MudCard Class="@($"{cardClass} clickable-card")" Style="border-radius: 16px; overflow: hidden;">
+                        
+                        @if (!isExpanded)
+                        {
+                            <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Stretch" @onclick="() => ToggleCard(fish.Id)">
+                                
+                                <MudImage Src="@imgSrc" ObjectFit="ObjectFit.Cover" Style="width: 120px; height: 120px; flex-shrink: 0;" />
+                                
+                                <MudStack Justify="Justify.Center" Spacing="1" Class="pa-3" Style="flex: 1; overflow: hidden;">
+                                    <MudText Typo="Typo.h6" Class="font-weight-bold text-truncate">@fish.Name</MudText>
+                                    <MudText Typo="Typo.body2" Class="description-collapsed">
+                                        @fish.Description
+                                    </MudText>
+                                </MudStack>
+
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <MudStack Spacing="0" @onclick="() => ToggleCard(fish.Id)">
+                                
+                                <div style="width: 100%; height: 250px; background-color: #f5f7fa; display: flex; justify-content: center; align-items: center;">
+                                    <MudImage Src="@imgSrc" ObjectFit="ObjectFit.Contain" Style="max-width: 100%; max-height: 100%; padding: 8px;" />
+                                </div>
+                                
+                                <MudStack Spacing="2" Class="pa-4 text-center">
+                                    <MudText Typo="Typo.h5" Class="font-weight-bold">@fish.Name</MudText>
+                                    <MudText Typo="Typo.body2">
+                                        @fish.Description
+                                    </MudText>
+                                </MudStack>
+
+                            </MudStack>
+
+                            <div class="px-4 pb-4">
+                                <MudButton Variant="Variant.Outlined"
+                                           Color="Color.Primary"
+                                           Size="Size.Medium"
+                                           OnClick="() => ShowSpotsDialog(fish)"
+                                           FullWidth="true"
+                                           Class="rounded-lg">
+                                    Visa fiskeplatser (@(fish.FishingSpots?.Count ?? 0))
+                                </MudButton>
+                            </div>
+                        }
+                    </MudCard>
+                </MudItem>
+            }
+        </MudStack>
+    </div>
+</MudContainer>
+
+<style>
+    .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .search-input {
+        margin: 0;
+    }
+
+        .search-input ::deep .mud-input-outlined:hover fieldset,
+        .search-input ::deep .mud-input-outlined.mud-input-focused fieldset {
+            border: none !important;
+        }
+
+        .search-input ::deep .mud-input-outlined .mud-input-adorned-end {
+            padding-right: 8px;
+        }
+
+    .filter-container {
+        background: white;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        width: 56px;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .filter-menu-button .mud-icon-button {
+        background-color: white;
+        border-radius: 50%;
+        width: 48px;
+        height: 48px;
+        transition: background-color 0.2s;
+    }
+
+        .filter-menu-button .mud-icon-button:hover {
+            background-color: #f5f5f5;
+        }
+    
+    .clickable-card {
+        cursor: pointer;
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+
+    .card-even {
+        background-color: white !important;
+        border: 1px solid rgba(0,0,0,0.05);
+    }
+
+    .card-odd {
+        background-color: #2B7AE314 !important;
+        border: 1px solid rgba(0,0,0,0.02);
+    }
+
+    .clickable-card:hover {
+        transform: scale(1.01);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    }
+
+    .description-collapsed {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-height: 3em;
+    }
+</style>
+
+@code {
+    private int? expandedFishId = null;
+    private List<FishSpeciesDTO> allFish = [];
+    private List<FishSpeciesDTO> filteredFish = [];
+    private string searchTerm = "";
+    private string selectedGroup = FilterAll;
+    
+    private readonly string defaultImageUrl = "https://static.vecteezy.com/system/resources/thumbnails/037/446/548/small/goldfish-isolated-on-transparent-background-ornamental-fish-generative-ai-png.png";
+
+    private const string FilterAll = "ALL";
+    private const string FilterPredator = "PREDATOR";
+    private const string FilterPrey = "PREY";
+    private const string FilterOther = "OTHER";
+
+    private readonly List<string> predatorNames = ["Gädda", "Abborre", "Gös", "Öring", "Havsöring", "Lax", "Lake", "Asp", "Gärs"];
+    private readonly List<string> preyNames = ["Karp", "Sutare", "Mört", "Braxen", "Björkna", "Ruda", "Sarv", "Löja", "Gers", "Nissöga", "Sik", "Siklöja", "Sil", "Nors", "Skarpsill", "Strömming"];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var fetchedFish = await AdminService.GetFishSpeciesAsync();
+        allFish = fetchedFish.OrderBy(f => f.Name).ToList();
+        ApplyFilters();
+    }
+
+    private void OnSearchKeyUp(KeyboardEventArgs e) => ApplyFilters();
+
+    private void ApplyFilters()
+    {
+        var query = allFish.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+            query = query.Where(f => f.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+
+        switch (selectedGroup)
+        {
+            case FilterPredator: query = query.Where(f => predatorNames.Contains(f.Name)); break;
+            case FilterPrey: query = query.Where(f => preyNames.Contains(f.Name)); break;
+            case FilterOther: query = query.Where(f => !predatorNames.Contains(f.Name) && !preyNames.Contains(f.Name)); break;
+        }
+
+        filteredFish = query.OrderBy(f => f.Name).ToList();
+        expandedFishId = null;
+        StateHasChanged();
+    }
+
+    private void SetFilter(string filter) { selectedGroup = filter; ApplyFilters(); }
+    private void ToggleCard(int fishId) => expandedFishId = (expandedFishId == fishId) ? null : fishId;
+
+    private async Task ShowSpotsDialog(FishSpeciesDTO fish)
+    {
+        var parameters = new DialogParameters
+        {
+            ["FishName"] = fish.Name,
+            ["Spots"] = fish.FishingSpots
+        };
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+        await DialogService.ShowAsync<SpotsDialog>("Fiskeplatser", parameters, options);
+    }
+}

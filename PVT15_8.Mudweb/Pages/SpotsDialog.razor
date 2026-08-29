@@ -1,0 +1,48 @@
+@using MudBlazor
+@using PVT15_8.Shared.DTOs
+@inject NavigationManager NavigationManager
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Fiskeplatser – @FishName</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (Spots.Any())
+        {
+            <MudList T="FishingSpotInfo">
+                @foreach (var spot in Spots)
+                {
+                    <MudListItem OnClick="() => NavigateToSpot(spot.Id)">
+                        @spot.Name
+                    </MudListItem>
+                }
+            </MudList>
+        }
+        else
+        {
+            <MudText>Inga registrerade fiskeplatser för denna art.</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton Variant="Variant.Text" OnClick="Close">Stäng</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter]
+    public string FishName { get; set; } = string.Empty;
+
+    [Parameter]
+    public List<FishingSpotInfo> Spots { get; set; } = new();
+
+    private void NavigateToSpot(int spotId)
+    {
+        MudDialog.Close(); 
+        NavigationManager.NavigateTo($"/fishingSpot/{spotId}");
+    }
+
+    private void Close() => MudDialog.Close();
+}

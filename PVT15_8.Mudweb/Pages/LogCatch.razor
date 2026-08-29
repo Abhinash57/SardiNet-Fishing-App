@@ -1,0 +1,301 @@
+@page "/log-catch"
+@using PVT15_8.Shared.DTOs
+@using System.Net.Http.Json
+@using System.Text
+@using System.Security.Claims
+@inject HttpClient Http
+@inject IJSRuntime Js
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Logga fångst</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="py-4">
+    <MudPaper Elevation="0" Class="pa-6" Style="border: 1px solid #e0e0e0; border-radius: 8px;">
+        <MudForm @ref="form">
+            <MudText Typo="Typo.body2" Color="Color.Default" Class="mb-2">Bild</MudText>
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudStack Row="true" Spacing="2" Class="mb-4">
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="TakePhoto" FullWidth="true">
+                            <MudIcon Icon="@Icons.Material.Filled.CameraAlt" /> Ta foto
+                        </MudButton>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Default" OnClick="ChooseFromGallery" FullWidth="true">
+                            <MudIcon Icon="@Icons.Material.Filled.PhotoLibrary" /> Välj bild
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+
+                @if (!string.IsNullOrEmpty(imageBase64))
+                {
+                    <MudItem xs="12">
+                        <div class="mb-4">
+                            <MudImage Src="@imageDataUrl" Height="160" ObjectFit="ObjectFit.Contain" Class="rounded" />
+                            <MudText Typo="Typo.caption" Align="Align.Center" Class="mt-1">@imageFileName</MudText>
+                        </div>
+                    </MudItem>
+                }
+
+                <MudItem xs="12">
+                    <MudSelect T="int?" Label="Fiskart" @bind-Value="fishSpeciesId"
+                               Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" FullWidth="true"
+                               Placeholder="Välj fiskart" Nullable="true" Class="mb-4">
+                        @foreach (var species in fishSpeciesList)
+                        {
+                            <MudSelectItem T="int?" Value="@species.Id">@species.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudSelect T="int?" Label="Fiskeplats" @bind-Value="fishingSpotId"
+                               Required="true" Variant="Variant.Outlined" Margin="Margin.Dense" FullWidth="true"
+                               Placeholder="Välj plats" Nullable="true" Class="mb-4">
+                        @foreach (var spot in fishingSpotsList)
+                        {
+                            <MudSelectItem T="int?" Value="@spot.Id">@spot.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudSelect T="int?" Label="Bete (valfritt)" @bind-Value="fishingLureId"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" FullWidth="true"
+                               Placeholder="Välj bete" Nullable="true" Class="mb-4">
+                        <MudSelectItem T="int?" Value="null">Inget bete</MudSelectItem>
+                        @foreach (var lure in fishingLuresList)
+                        {
+                            <MudSelectItem T="int?" Value="@lure.Id">@lure.Name (@lure.Type)</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDatePicker Label="Datum" @bind-Date="selectedDate" Required="true"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-4" />
+                </MudItem>
+
+                <MudItem xs="6">
+                    <MudNumericField Min="0" Max="100" T="double?" Label="Vikt (kg)" @bind-Value="weightKg"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" FullWidth="true" Format="F1" />
+                </MudItem>
+                <MudItem xs="6">
+                    <MudNumericField Min="0" Max="300" T="double?" Label="Längd (cm)" @bind-Value="lengthCm"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" FullWidth="true" Format="F0" />
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField MaxLength="250" Counter="250" Label="Beskrivning" @bind-Value="description"
+                                  Lines="3" Variant="Variant.Outlined" Margin="Margin.Dense" FullWidth="true" Class="mt-2" />
+                </MudItem>
+            </MudGrid>
+
+            @if (errorVisible)
+            {
+                <MudAlert Severity="Severity.Error" Class="mt-6">@errorMessage</MudAlert>
+            }
+            @if (successVisible)
+            {
+                <MudAlert Severity="Severity.Success" Class="mt-6">Fångsten sparad!</MudAlert>
+            }
+        </MudForm>
+
+        <MudCardActions Class="px-0 pb-0 pt-4">
+            <MudButton Variant="Variant.Filled" Style="background-color: #3e79c7; color: #fff" Class="rounded-lg" OnClick="Submit" Disabled="@isSubmitting" FullWidth="true">
+                @if (isSubmitting)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Sparar...</span>
+                }
+                else
+                {
+                    <span>Spara fångst</span>
+                }
+            </MudButton>
+        </MudCardActions>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private MudForm? form;
+    private List<FishSpeciesDTO> fishSpeciesList = new();
+    private List<FishingSpotMarkerDTO> fishingSpotsList = new();
+    private List<FishingLureDTO> fishingLuresList = new();
+
+    private int? fishSpeciesId = null;
+    private int? fishingSpotId = null;
+    private int? fishingLureId = null;
+
+    private DateTime? selectedDate = DateTime.Today;
+    private DateTime? catchDate => selectedDate.HasValue
+        ? selectedDate.Value.Add(DateTime.Now.TimeOfDay)
+        : null;
+
+    private double? weightKg = null;
+    private double? lengthCm = null;
+    private string? description = null;
+
+    private string? imageBase64;
+    private string? imageFileName;
+    private string? imageContentType;
+    private string? imageDataUrl => !string.IsNullOrEmpty(imageBase64) ? $"data:{imageContentType};base64,{imageBase64}" : null;
+
+    private bool isSubmitting = false;
+    private bool errorVisible = false;
+    private bool successVisible = false;
+    private string errorMessage = "";
+
+    private DotNetObjectReference<LogCatch>? dotNetRef;
+    private string? currentUserId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        errorVisible = false;
+        successVisible = false;
+        await LoadDropdownData();
+        await LoadCurrentUser();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) dotNetRef = DotNetObjectReference.Create(this);
+    }
+
+    private async Task LoadCurrentUser()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        currentUserId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user.Identity?.Name ?? "unknown";
+    }
+
+    private async Task LoadDropdownData()
+    {
+        try
+        {
+            fishSpeciesList = await Http.GetFromJsonAsync<List<FishSpeciesDTO>>("/api/fishspecies") ?? new();
+            var spots = await Http.GetFromJsonAsync<List<FishingSpotDTO>>("/api/fishingspots") ?? new();
+            fishingSpotsList = spots.Select(s => new FishingSpotMarkerDTO { Id = s.Id, Name = s.Name }).ToList();
+            fishingLuresList = await Http.GetFromJsonAsync<List<FishingLureDTO>>("/api/fishinglures") ?? new();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Kunde inte ladda data: {ex.Message}";
+            errorVisible = true;
+            StateHasChanged();
+        }
+    }
+
+    private async Task TakePhoto() => await Js.InvokeVoidAsync("cameraHelper.takePhoto", dotNetRef);
+    private async Task ChooseFromGallery() => await Js.InvokeVoidAsync("cameraHelper.chooseFromGallery", dotNetRef);
+
+    [JSInvokable]
+    public void OnImageSelected(string base64Data, string fileName, string contentType)
+    {
+        imageBase64 = base64Data;
+        imageFileName = fileName;
+        imageContentType = contentType;
+        if (errorVisible && errorMessage.Contains("bild")) errorVisible = false;
+        StateHasChanged();
+    }
+
+    private async Task Submit()
+    {
+        errorVisible = false;
+        successVisible = false;
+
+        if (string.IsNullOrEmpty(imageBase64))
+        {
+            errorMessage = "Du måste välja en bild.";
+            errorVisible = true;
+            return;
+        }
+        if (!fishSpeciesId.HasValue)
+        {
+            errorMessage = "Välj fiskart.";
+            errorVisible = true;
+            return;
+        }
+        if (!fishingSpotId.HasValue)
+        {
+            errorMessage = "Välj fiskeplats.";
+            errorVisible = true;
+            return;
+        }
+        if (catchDate == null)
+        {
+            errorMessage = "Välj ett datum.";
+            errorVisible = true;
+            return;
+        }
+
+        isSubmitting = true;
+        StateHasChanged();
+
+        try
+        {
+            using var imageFormContent = new MultipartFormDataContent();
+            var imageBytes = Convert.FromBase64String(imageBase64);
+            var imageContent = new ByteArrayContent(imageBytes);
+            imageContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(imageContentType ?? "image/jpeg");
+            
+            imageFormContent.Add(imageContent, "file", imageFileName ?? "catch.jpg");
+
+            var mediaResponse = await Http.PostAsync("/media/images/report-catch", imageFormContent);
+            
+            if (!mediaResponse.IsSuccessStatusCode)
+            {
+                errorMessage = "Fel vid uppladdning av bild till mediatjänsten.";
+                errorVisible = true;
+                return;
+            }
+
+            var uploadResult = await mediaResponse.Content.ReadFromJsonAsync<UploadResponse>();
+            if (string.IsNullOrEmpty(uploadResult?.Url))
+            {
+                errorMessage = "Mediatjänsten returnerade ingen giltig bildlänk.";
+                errorVisible = true;
+                return;
+            }
+
+            var catchReportData = new
+            {
+                UserId = currentUserId,
+                FishSpeciesId = fishSpeciesId.Value,
+                FishingSpotId = fishingSpotId.Value,
+                FishingLureId = fishingLureId,
+                CatchDate = catchDate.Value.ToString("yyyy-MM-ddTHH:mm:ss"),
+                WeightKg = weightKg,
+                LengthCm = lengthCm,
+                Description = description,
+                ImageUrl = uploadResult.Url 
+            };
+
+            var apiResponse = await Http.PostAsJsonAsync("/api/catchreports", catchReportData);
+            
+            if (apiResponse.IsSuccessStatusCode)
+            {
+                successVisible = true;
+                await Task.Delay(2000);
+                Nav.NavigateTo("/catches");
+            }
+            else
+            {
+                var error = await apiResponse.Content.ReadAsStringAsync();
+                errorMessage = $"Fel vid sparande av fångst: {error}";
+                errorVisible = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            errorVisible = true;
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+    
+    private record UploadResponse(string Url);
+}

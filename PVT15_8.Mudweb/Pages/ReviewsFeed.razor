@@ -1,0 +1,226 @@
+@page "/reviews"
+@using PVT15_8.Shared.DTOs
+@using PVT15_8.Shared
+@using System.Net.Http.Json
+@inject IHttpClientFactory HttpClientFactory
+
+<PageTitle>Senaste recensioner</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="my-8" Style="padding-bottom: 80px;">
+    
+    <div class="top-bar">
+        <div class="search-container">
+            <MudTextField @bind-Value="searchTerm" Placeholder="Sök i kommentarer eller efter plats..."
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search" Immediate="true"
+                          Variant="Variant.Outlined" Class="search-input" OnKeyUp="OnSearchKeyUp" />
+        </div>
+        <div class="filter-container">
+            <MudMenu Icon="@Icons.Material.Filled.FilterAlt" Size="Size.Large" Class="filter-menu-button"
+                     AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                <MudMenuItem OnClick="() => SetSpotFilter(null)">Alla platser</MudMenuItem>
+                @foreach (var spot in fishingSpots)
+                {
+                    <MudMenuItem OnClick="() => SetSpotFilter(spot.Id)">@spot.Name</MudMenuItem>
+                }
+            </MudMenu>
+        </div>
+    </div>
+
+    @if (allReviews == null)
+    {
+        <MudProgressCircular Indeterminate="true" Color="Color.Primary" Class="mt-4" />
+    }
+    else if (!filteredReviews.Any())
+    {
+        <MudAlert Severity="Severity.Info" Class="mt-4">Inga recensioner matchar dina filter.</MudAlert>
+    }
+    else
+    {
+        @foreach (var r in filteredReviews)
+        {
+            <MudCard Class="mb-4" Elevation="2">
+                <MudCardContent>
+                    <MudGrid VerticalAlignItems="Center">
+                        <MudItem xs="12" sm="4" md="3" lg="3" Class="d-flex flex-column align-center justify-center">
+                            <div style="position: relative; width: 100px; height: 100px;">
+                                @*@if (userProfiles.TryGetValue(r.UserId, out var profile) && profile?.ProfilePicture != null &&
+                                                profile.ProfilePicture.Length > 0)
+                                {
+                                    var avatarSrc = $"data:image/jpeg;base64,{Convert.ToBase64String(profile.ProfilePicture)}";
+                                    <MudImage Src="@avatarSrc" Alt="Profilbild"
+                                              Style="width: 100px; height: 100px; object-fit: cover; border-radius: 50%;" Elevation="1" />
+                                }
+                                else
+                                {*@
+                                    <MudPaper Height="100px" Width="100px" Class="d-flex align-center justify-center rounded-circle"
+                                              Style="background:#e0e0e0;" Elevation="1">
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Default" Size="Size.Large" />
+                                    </MudPaper>
+                                @*}*@
+                            </div>
+                            <div class="d-flex align-center gap-2 mb-2">
+                                <MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
+                                         Icon="@Icons.Material.Filled.Person">
+                                    Anonym
+                                </MudChip>
+                            </div>
+                        </MudItem>
+
+                        <MudItem xs="12" sm="8" md="9" lg="9">
+                            <MudText Typo="Typo.h6" Color="Color.Dark" Class="mb-1">
+                                @GetFishingSpotName(r.FishingSpotId)
+                            </MudText>
+                            <MudRating SelectedValue="@r.Rating" ReadOnly="true" Class="mt-2" />
+
+
+                            @if (!string.IsNullOrWhiteSpace(r.Comment))
+                            {
+                                <MudPaper Class="pa-3 rounded"
+                                          Style="background-color: #fafafa; border-left: 4px solid var(--mud-palette-primary);"
+                                          Elevation="0">
+                                    <MudText Typo="Typo.body1">
+                                        "@r.Comment"
+                                    </MudText>
+                                </MudPaper>
+                            }
+                            else { }
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+        }
+    }
+</MudContainer>
+
+<style>
+    .top-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .search-container {
+        flex: 1;
+        background: white;
+        border-radius: 40px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        padding: 4px 8px;
+    }
+
+    .search-input {
+        margin: 0;
+    }
+
+    .search-input ::deep .mud-input-outlined:hover fieldset,
+    .search-input ::deep .mud-input-outlined.mud-input-focused fieldset {
+        border: none !important;
+    }
+
+    .search-input ::deep .mud-input-outlined .mud-input-adorned-end {
+        padding-right: 8px;
+    }
+
+    .filter-container {
+        background: white;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        width: 56px;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .filter-menu-button .mud-icon-button {
+        background-color: white;
+        border-radius: 50%;
+        width: 48px;
+        height: 48px;
+        transition: background-color 0.2s;
+    }
+
+    .filter-menu-button .mud-icon-button:hover {
+        background-color: #f5f5f5;
+    }
+</style>
+
+@code {
+    private List<ReviewDTO>? allReviews;
+    private List<ReviewDTO> filteredReviews = new();
+    private List<FishingSpotMarkerDTO> fishingSpots = new();
+    private Dictionary<string, ProfileDTO> userProfiles = new(StringComparer.OrdinalIgnoreCase);
+
+    private string searchTerm = "";
+    private int? selectedSpotId = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var gatewayClient = HttpClientFactory.CreateClient("GatewayClient");
+
+        var reviewsTask = gatewayClient.GetFromJsonAsync<List<ReviewDTO>>("/api/reviews");
+        var spotsTask = gatewayClient.GetFromJsonAsync<List<FishingSpotMarkerDTO>>("/api/fishingspots/markers");
+
+        await Task.WhenAll(reviewsTask, spotsTask);
+
+        allReviews = reviewsTask.Result ?? new List<ReviewDTO>();
+        fishingSpots = spotsTask.Result ?? new List<FishingSpotMarkerDTO>();
+
+        var profilesTask = gatewayClient.GetFromJsonAsync<Dictionary<string, ProfileDTO>>("/api/profiles");
+
+        try
+        {
+            await Task.WhenAll(reviewsTask, spotsTask, profilesTask);
+
+            allReviews = reviewsTask.Result ?? new List<ReviewDTO>();
+            fishingSpots = spotsTask.Result ?? new List<FishingSpotMarkerDTO>();
+            userProfiles = profilesTask.Result ?? new Dictionary<string, ProfileDTO>();
+        }
+        catch (Exception)
+        {
+            allReviews = await reviewsTask ?? new List<ReviewDTO>();
+            fishingSpots = await spotsTask ?? new List<FishingSpotMarkerDTO>();
+        }
+
+        ApplyFilters();
+    }
+
+    private void OnSearchKeyUp(KeyboardEventArgs e) => ApplyFilters();
+
+    private void SetSpotFilter(int? spotId)
+    {
+        selectedSpotId = spotId;
+        ApplyFilters();
+    }
+
+    private string GetFishingSpotName(int spotId)
+    {
+        var spot = fishingSpots.FirstOrDefault(s => s.Id == spotId);
+        return spot?.Name ?? $"Fiskeplats #{spotId}";
+    }
+
+    private void ApplyFilters()
+    {
+        if (allReviews == null) return;
+
+        var query = allReviews.AsEnumerable();
+
+        if (selectedSpotId.HasValue)
+        {
+            query = query.Where(r => r.FishingSpotId == selectedSpotId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+        {
+            query = query.Where(r =>
+                (r.Comment != null && r.Comment.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)) ||
+                GetFishingSpotName(r.FishingSpotId).Contains(searchTerm, StringComparison.OrdinalIgnoreCase)
+            );
+        }
+
+        filteredReviews = query.OrderByDescending(r => r.Id).ToList();
+        StateHasChanged();
+    }
+}

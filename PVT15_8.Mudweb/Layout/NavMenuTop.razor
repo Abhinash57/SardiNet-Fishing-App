@@ -1,0 +1,93 @@
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject HttpClient Http
+@inject AuthenticationStateProvider AuthStateProvider
+
+<MudAppBar Elevation="0" Style="background-color: #fff">
+    <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Dark" OnClick="HandleRedirectPreviousPage" />
+    <MudSpacer />
+    <MudText Typo="Typo.h6" Color="Color.Dark">@GetPageTitle()</MudText>
+    <MudSpacer />
+    <MudMenu Dense="true" MaxHeight="500" Icon="@Icons.Material.Filled.Menu" Color="Color.Dark" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+        <MudText Typo="Typo.h6" Color="Color.Dark" Class="px-4 py-1">Navigation</MudText>
+        <MudMenuItem Href="/Home" Icon="@Icons.Material.Filled.Home">Menu</MudMenuItem>
+        <MudMenuItem Href="/Map" Icon="@Icons.Material.Filled.Map">Karta</MudMenuItem>
+        <MudMenuItem Href="/Recommendation" Icon="@Icons.Material.Filled.Recommend">Rekommendationer</MudMenuItem>
+        <MudMenuItem Href="/FishList" Icon="@Icons.Material.Filled.SetMeal">Arter</MudMenuItem>
+        <MudMenuItem Href="/FishingLure" Icon="@Icons.Material.Filled.Phishing">Drag</MudMenuItem>
+        <MudMenuItem Href="/Weather" Icon="@Icons.Material.Filled.Cloud">Väder</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Outlined.Bookmark" Href="/savedSpots">Sparade platser</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Sharp.CameraAlt" Href="/log-catch">Logga fångst</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Sharp.Newspaper" Href="/catches">Fångster</MudMenuItem>
+        <MudMenuItem Icon="@Icons.Material.Outlined.Star" Href="/reviews">Rescensioner</MudMenuItem>
+
+        <MudDivider />
+        <MudText Typo="Typo.caption" Color="Color.Dark" Class="px-4 py-1">Övrigt</MudText>
+        <MudMenuItem Href="/Profile" Icon="@Icons.Material.Filled.Person">Profil</MudMenuItem>
+        <MudMenuItem Href="/settings" Icon="@Icons.Material.Filled.Settings">Inställningar</MudMenuItem>
+
+        <AuthorizeView Roles="Admin">
+            <Authorized>
+                <MudDivider />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="px-4 py-1">ADMINISTRATÖR</MudText>
+                <MudMenuItem Href="/admin/map" Icon="@Icons.Material.Filled.Map">Hantera fiskeplatser</MudMenuItem>
+                <MudMenuItem Href="/admin/lures" Icon="@Icons.Material.Filled.Anchor">Hantera drag</MudMenuItem>
+                <MudMenuItem Href="/admin/species" Icon="@Icons.Material.Filled.SetMeal">Hantera arter</MudMenuItem>
+            </Authorized>
+        </AuthorizeView>
+
+        <MudDivider />
+        <MudMenuItem OnClick="HandleLogout" Icon="@Icons.Material.Filled.Logout" IconColor="Color.Error">Logga ut</MudMenuItem>
+    </MudMenu>
+</MudAppBar>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+    }
+
+    private void OnLocationChanged(object? sender, Microsoft.AspNetCore.Components.Routing.LocationChangedEventArgs e)
+    {
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Navigation.LocationChanged -= OnLocationChanged;
+    }
+
+    private string GetPageTitle()
+    {
+        var uri = Navigation.Uri;
+        return uri switch
+        {
+            _ when uri.Contains("Home") => "Menu",
+            _ when uri.Contains("Weather") => "Väder",
+            _ when uri.Contains("FishList") => "Fiskarter",
+            _ when uri.Contains("FishingLure") => "Fiskedrag",
+            _ when uri.Contains("FishSearch") => "Sök fiskart",
+            _ when uri.Contains("Profile") => "Profil",
+            _ when uri.Contains("Map") => "Karta",
+            _ when uri.Contains("settings") => "Inställningar",
+            _ when uri.Contains("log-catch") => "Logga fångst",
+            _ when uri.Contains("catches") => "Alla fångster",
+            _ when uri.Contains("my-catches") => "Mina fångster",
+            _ when uri.Contains("fishingSpot") => "Fiskplats",
+            _ => "SardiNet"
+        };
+    }
+
+    private async Task HandleRedirectPreviousPage()
+    {
+        await JS.InvokeVoidAsync("history.back");
+    }
+    
+    private async Task HandleLogout()
+    {
+        var customAuthStateProvider = (IdentityAuthenticationStateProvider)AuthStateProvider;
+        await customAuthStateProvider.LogoutAsync();
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}

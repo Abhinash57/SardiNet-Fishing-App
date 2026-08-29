@@ -1,0 +1,601 @@
+﻿@page "/map"
+@using GoogleMapsComponents
+@using GoogleMapsComponents.Maps
+@using PVT15_8.Shared.DTOs
+@using System.Threading
+@using MudBlazor
+@attribute [Authorize]
+@inject AdminService AdminService
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Karta</PageTitle>
+
+<MudContainer Style=" position: fixed; height: 100%; width: 100%;">
+    <MudCard Elevation="3" Class="overflow-hidden" Style="box-shadow: none;">
+        <MudCardHeader>
+            <CardHeaderActions>
+                <div class="filter-wrapper">
+                    <div class="search-wrapper">
+                        <MudTextField @bind-Value="searchTerm"
+                            Placeholder="Sök fiskeplats..."
+                            Adornment="Adornment.End"
+                            AdornmentIcon="@(string.IsNullOrEmpty(searchTerm) ? Icons.Material.Filled.Search : Icons.Material.Filled.Close)"
+                            AdornmentColor="Color.Default"
+                            OnAdornmentClick="ClearSearch"
+                            Variant="Variant.Outlined"
+                            Class="search-input"
+                            OnKeyUp="OnSearchKeyUp"
+                            OnKeyDown="OnSearchKeyDown" />
+                    </div>
+                    <MudIconButton Icon="@(isSatellite ? Icons.Material.Filled.Map : Icons.Material.Filled.Satellite)"
+                        Size="MudBlazor.Size.Medium"
+                        Color="Color.Default"
+                        Class="map-type-button"
+                        OnClick="ToggleMapType" />
+                    <MudMenu Icon="@Icons.Material.Filled.FilterAlt"
+                        Size="MudBlazor.Size.Medium"
+                        Color="Color.Default"
+                        Class="filter-button"
+                        AnchorOrigin="Origin.BottomRight"
+                        TransformOrigin="Origin.TopRight">
+                        <MudMenuItem OnClick="ResetAllFilters">Alla platser</MudMenuItem>
+                        <MudMenuItem OnClick="() => SetRadius(5)">5 km</MudMenuItem>
+                        <MudMenuItem OnClick="() => SetRadius(10)">10 km</MudMenuItem>
+                        <MudMenuItem OnClick="() => SetRadius(15)">15 km</MudMenuItem>
+                        <MudMenuItem OnClick="() => SetRadius(20)">20 km</MudMenuItem>
+                        <MudDivider />
+                        <div class="slider-menu-item">
+                            <MudText Typo="Typo.body2" Class="mb-2">Anpassad radie</MudText>
+                            <div class="slider-container">
+                                <MudSlider @bind-Value="customRadiusKm"
+                                           Min="0"
+                                           Max="50"
+                                           Step="1"
+                                           Color="Color.Primary"
+                                           Class="custom-slider" />
+                                <MudText Typo="Typo.body2" Class="ml-2">
+                                    @(customRadiusKm == 0 ? "Alla" : $"{customRadiusKm} km")
+                                </MudText>
+                            </div>
+                            <MudButton Variant="Variant.Text" Color="Color.Primary" Class="mt-2" OnClick="ApplyCustomRadius">Använd</MudButton>
+                        </div>
+                        <MudDivider />
+                        <MudMenuItem OnClick="OpenSpeciesDialog">Välj arter</MudMenuItem>
+                        @if (selectedSpeciesIds.Any())
+                        {
+                            <MudMenuItem OnClick="ClearSpeciesFilter">
+                                <MudText Color="Color.Secondary">Rensa artfilter</MudText>
+                            </MudMenuItem>
+                        }
+                    </MudMenu>
+                </div>
+            </CardHeaderActions>
+        </MudCardHeader>
+        <MudCardContent Style="padding: 0;">
+        </MudCardContent>
+            <div class="map-container">
+                @if (isLoading)
+                {
+                    <div class="loading-overlay">
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="MudBlazor.Size.Large" />
+                    </div>
+                }
+                <GoogleMap @ref="_map1" Id="map1" Options="@_mapOptions" OnAfterInit="HandleAfterInit" />
+            </div> 
+    </MudCard>
+</MudContainer>
+
+<style>
+    .map-container {
+        position: relative;
+        width: 100%;
+        height: 70dvh;
+        overflow: hidden;
+    }
+    #map1 {
+        height: 100% !important;
+        width: 100% !important;
+        display: block;
+    }
+    .loading-overlay {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 10;
+        background: rgba(255,255,255,0.8);
+        padding: 16px;
+        border-radius: 50%;
+    }
+    .filter-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .search-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .search-input {
+        width: 250px;
+    }
+    .filter-button, .map-type-button {
+        background-color: #f5f5f5;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .filter-button:hover, .map-type-button:hover {
+        background-color: #e0e0e0;
+    }
+    .slider-menu-item {
+        padding: 12px 16px;
+        min-width: 250px;
+    }
+    .slider-container {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .custom-slider {
+        flex: 1;
+    }
+    .mud-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    @@media (max-width: 600px) {
+        .map-container { height: 70vh; min-height: 400px; }
+        .mud-card-header { flex-direction: column; align-items: center; gap: 12px; }
+        .mud-card-header .mud-card-header-content { width: 100%; text-align: center; }
+        .mud-card-header .mud-card-header-actions { width: 100%; margin-top: 0; }
+        .filter-wrapper { flex-direction: row; justify-content: space-between; gap: 8px; width: 100%; }
+        .search-wrapper { flex: 1; min-width: 0; }
+        .search-input { width: 100%; }
+        .filter-button, .map-type-button { flex-shrink: 0; width: 40px; height: 40px; }
+        .slider-menu-item { min-width: 200px; }
+    }
+</style>
+
+@code {
+    private GoogleMap? _map1;
+    private List<FishingSpotMarkerDTO>? allSpots = new();
+    private List<Marker> currentMarkers = new();
+    private Circle? radiusCircle;
+    private Marker? userLocationMarker;
+    private string searchTerm = "";
+    private int selectedRadiusKm = 0;
+    private int customRadiusKm = 0;
+    private double? userLat;
+    private double? userLng;
+    private bool isLoading = true;
+    private bool _isUpdating = false;
+    private Timer? _debounceTimer;
+    private List<FishSpeciesDTO> allSpecies = new();
+    private List<int> selectedSpeciesIds = new();
+    private List<FishingSpotMarkerDTO> filteredBySpeciesSpots = new();
+    private bool isSatellite = false;
+
+    private MapOptions _mapOptions = new()
+    {
+        Zoom = 10,
+        Center = new LatLngLiteral(59.3293, 18.0686),
+        MapTypeId = MapTypeId.Roadmap,
+        Styles = MapStyle(),
+        DisableDefaultUI = true
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        allSpots = await AdminService.GetFishingSpots();
+        allSpecies = await AdminService.GetFishSpeciesAsync();
+        filteredBySpeciesSpots = allSpots ?? new();
+        await GetUserLocation();   
+        await RenderMarkers(filteredBySpeciesSpots);
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task GetUserLocation()
+    {
+        try
+        {
+            var loc = await JS.InvokeAsync<LocationResult>("getBrowserLocation");
+            userLat = loc.Latitude;
+            userLng = loc.Longitude;
+            Console.WriteLine($"Location obtained: {userLat}, {userLng}");
+            await TryAddMarkerWhenReady();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Location error: {ex.Message}");
+            Snackbar.Add("Kunde inte hämta din position. Visar alla platser.", Severity.Warning, config => config.VisibleStateDuration = 2000);
+            userLat = null;
+            userLng = null;
+        }
+    }
+
+    private async Task TryAddMarkerWhenReady()
+    {
+        if (_map1 == null || !userLat.HasValue || !userLng.HasValue) return;
+
+        await Task.Delay(100);
+        await AddUserLocationMarker();
+    }
+
+    private async Task AddUserLocationMarker()
+    {
+        if (_map1 == null || !userLat.HasValue || !userLng.HasValue) return;
+
+        if (userLocationMarker != null)
+        {
+            await userLocationMarker.SetMap(null);
+        }
+
+        string svgIcon = "data:image/svg+xml;charset=UTF-8," + Uri.EscapeDataString(
+            @"<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'>
+                <circle cx='10' cy='10' r='8' fill='#4285F4' stroke='white' stroke-width='2'/>
+              </svg>");
+
+        var icon = new Icon
+        {
+            Url = svgIcon,
+            ScaledSize = new GoogleMapsComponents.Maps.Size { Width = 20, Height = 20 },
+            Anchor = new GoogleMapsComponents.Maps.Point { X = 10, Y = 10 }
+        };
+
+        userLocationMarker = await Marker.CreateAsync(_map1.JsRuntime, new MarkerOptions()
+        {
+            Position = new LatLngLiteral(userLat.Value, userLng.Value),
+            Map = _map1.InteropObject,
+            Title = "Din position",
+            Icon = icon,
+            ZIndex = 1000
+        });
+    }
+
+    private async Task ToggleMapType()
+    {
+        if (_map1 == null) return;
+        if (isSatellite)
+        {
+            await _map1.InteropObject.SetMapTypeId(MapTypeId.Roadmap);
+            isSatellite = false;
+        }
+        else
+        {
+            await _map1.InteropObject.SetMapTypeId(MapTypeId.Satellite);
+            isSatellite = true;
+        }
+        StateHasChanged();
+    }
+
+    private async Task UpdateRadiusCircle()
+    {
+        if (_map1 == null || !userLat.HasValue || !userLng.HasValue) return;
+        if (radiusCircle != null) await radiusCircle.SetMap(null);
+        radiusCircle = null;
+        if (selectedRadiusKm == 0) return;
+        var radiusMeters = selectedRadiusKm * 1000;
+        var circleOptions = new CircleOptions()
+        {
+            Center = new LatLngLiteral(userLat.Value, userLng.Value),
+            Radius = radiusMeters,
+            StrokeColor = "#4285F4",
+            StrokeOpacity = 0.8f,
+            StrokeWeight = 2,
+            FillColor = "#4285F4",
+            FillOpacity = 0.2f,
+            Map = _map1.InteropObject
+        };
+        radiusCircle = await Circle.CreateAsync(_map1.JsRuntime, circleOptions);
+    }
+
+    private void OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        _debounceTimer?.Dispose();
+        _debounceTimer = new Timer(_ => InvokeAsync(async () => await ApplyFilters()), null, 200, Timeout.Infinite);
+    }
+
+    private void OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            _debounceTimer?.Dispose();
+            _ = ApplyFilters();
+        }
+    }
+
+    private async Task ClearSearch()
+    {
+        if (string.IsNullOrEmpty(searchTerm)) return;
+        searchTerm = "";
+        await ApplyFilters();
+    }
+
+    private async Task ApplyFilters()
+    {
+        if (_isUpdating) return;
+        _isUpdating = true;
+
+        try
+        {
+            if (filteredBySpeciesSpots == null) return;
+            var query = filteredBySpeciesSpots.AsEnumerable();
+
+            bool searchWasActive = !string.IsNullOrWhiteSpace(searchTerm);
+            if (searchWasActive)
+            {
+                query = query.Where(s => s.Name.Contains(searchTerm, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (selectedRadiusKm > 0 && userLat.HasValue && userLng.HasValue)
+            {
+                query = query.Where(s =>
+                {
+                    var distance = GetDistanceInMeters(userLat.Value, userLng.Value, s.Latitude, s.Longitude);
+                    return distance <= selectedRadiusKm * 1000;
+                });
+                if (radiusCircle == null && selectedRadiusKm > 0) await UpdateRadiusCircle();
+            }
+            else
+            {
+                if (radiusCircle != null) await radiusCircle.SetMap(null);
+                radiusCircle = null;
+            }
+
+            var resultList = query.ToList();
+
+            if (searchWasActive && resultList.Count == 0)
+            {
+                Snackbar.Add($"Ingen plats matchar \"{searchTerm}\"", Severity.Warning, config => config.VisibleStateDuration = 2000);
+            }
+
+            await RenderMarkers(resultList);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ApplyFilters error: {ex.Message}");
+        }
+        finally
+        {
+            _isUpdating = false;
+        }
+    }
+
+    private async Task OpenSpeciesDialog()
+    {
+        var parameters = new DialogParameters
+        {
+            ["SpeciesList"] = allSpecies,
+            ["SelectedIds"] = selectedSpeciesIds
+        };
+        var dialog = await DialogService.ShowAsync<SpeciesSelectionDialog>("Välj arter", parameters);
+        var result = await dialog.Result;
+        if (!result.Canceled && result.Data is List<int> newSelectedIds)
+        {
+            selectedSpeciesIds = newSelectedIds;
+            await ApplySpeciesFilter();
+        }
+    }
+
+    private async Task ApplySpeciesFilter()
+    {
+        if (_isUpdating) return;
+        _isUpdating = true;
+
+        try
+        {
+            if (selectedSpeciesIds == null || selectedSpeciesIds.Count == 0)
+            {
+                filteredBySpeciesSpots = allSpots ?? new();
+                Snackbar.Add("Visar alla platser", Severity.Info, config => config.VisibleStateDuration = 2000);
+            }
+            else
+            {
+                isLoading = true;
+                StateHasChanged();
+                var filterDto = new FishingSpotFilterDto { SpeciesIds = selectedSpeciesIds };
+                filteredBySpeciesSpots = await AdminService.GetFilteredFishingSpotsAsync(filterDto);
+                if (filteredBySpeciesSpots.Count == 0)
+                    Snackbar.Add("Inga platser hittades för valda arter", Severity.Warning, config => config.VisibleStateDuration = 2000);
+                else
+                    Snackbar.Add($"Visar {filteredBySpeciesSpots.Count} platser med valda arter", Severity.Info, config => config.VisibleStateDuration = 2000);
+                isLoading = false;
+            }
+            selectedRadiusKm = 0;
+            customRadiusKm = 0;
+            searchTerm = "";
+            await UpdateRadiusCircle();
+            await RenderMarkers(filteredBySpeciesSpots);
+        }
+        finally
+        {
+            _isUpdating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ClearSpeciesFilter()
+    {
+        if (_isUpdating) return;
+        selectedSpeciesIds.Clear();
+        filteredBySpeciesSpots = allSpots ?? new();
+        selectedRadiusKm = 0;
+        customRadiusKm = 0;
+        searchTerm = "";
+        await UpdateRadiusCircle();
+        await RenderMarkers(filteredBySpeciesSpots);
+        Snackbar.Add("Artfilter rensat – visar alla platser", Severity.Info, config => config.VisibleStateDuration = 2000);
+    }
+
+    private async Task ResetAllFilters()
+    {
+        if (_isUpdating) return;
+        _isUpdating = true;
+
+        try
+        {
+            selectedSpeciesIds.Clear();
+            filteredBySpeciesSpots = allSpots ?? new List<FishingSpotMarkerDTO>();
+            searchTerm = "";
+            selectedRadiusKm = 0;
+            customRadiusKm = 0;
+            if (radiusCircle != null)
+            {
+                await radiusCircle.SetMap(null);
+                radiusCircle = null;
+            }
+            await RenderMarkers(filteredBySpeciesSpots);
+            Snackbar.Add("Visar alla fiskeplatser", Severity.Info, config => config.VisibleStateDuration = 2000);
+        }
+        finally
+        {
+            _isUpdating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task SetRadius(int radiusKm)
+    {
+        if (_isUpdating) return;
+        selectedRadiusKm = radiusKm;
+        customRadiusKm = radiusKm;
+        await UpdateRadiusCircle();
+        await ApplyFilters();
+        Snackbar.Add(radiusKm == 0 ? "Visar alla platser" : $"Visar platser inom {radiusKm} km", Severity.Info, config => config.VisibleStateDuration = 2000);
+    }
+
+    private async Task ApplyCustomRadius()
+    {
+        if (_isUpdating) return;
+        selectedRadiusKm = customRadiusKm;
+        await UpdateRadiusCircle();
+        await ApplyFilters();
+        Snackbar.Add(customRadiusKm == 0 ? "Visar alla platser" : $"Visar platser inom {customRadiusKm} km", Severity.Info, config => config.VisibleStateDuration = 2000);
+    }
+
+    private async Task HandleAfterInit()
+{
+    if (userLat.HasValue && userLng.HasValue && _map1 != null)
+    {
+        await _map1.InteropObject.SetCenter(new LatLngLiteral(userLat.Value, userLng.Value));
+        await _map1.InteropObject.SetZoom(12);
+    }
+    await UpdateRadiusCircle();
+    await ApplyFilters();
+
+    await TryAddMarkerWhenReady();
+}
+
+private async Task CenterOnUserLocation()
+{
+    if (_map1 == null) return;
+
+    if (userLat.HasValue && userLng.HasValue)
+    {
+        await _map1.InteropObject.SetCenter(new LatLngLiteral(userLat.Value, userLng.Value));
+        await _map1.InteropObject.SetZoom(14);
+        if (userLocationMarker == null)
+            await AddUserLocationMarker();
+        Snackbar.Add("Kartan centrerad på din position", Severity.Info, config => config.VisibleStateDuration = 2000);
+    }
+    else
+    {
+        Snackbar.Add("Hämtar din position...", Severity.Info, config => config.VisibleStateDuration = 2000);
+        await GetUserLocation();
+        if (userLat.HasValue && userLng.HasValue && _map1 != null)
+        {
+            await _map1.InteropObject.SetCenter(new LatLngLiteral(userLat.Value, userLng.Value));
+            await _map1.InteropObject.SetZoom(14);
+            Snackbar.Add("Kartan centrerad på din position", Severity.Success, config => config.VisibleStateDuration = 2000);
+        }
+        else
+        {
+            Snackbar.Add("Kunde inte hämta din position. Kontrollera platsbehörigheter.", Severity.Error, config => config.VisibleStateDuration = 3000);
+        }
+    }
+}
+    private async Task RenderMarkers(List<FishingSpotMarkerDTO> spotsToRender)
+    {
+        if (_map1 == null) return;
+        foreach (var marker in currentMarkers) await marker.SetMap(null);
+        currentMarkers.Clear();
+
+        foreach (var spotMarker in spotsToRender)
+        {
+            var marker = await Marker.CreateAsync(_map1.JsRuntime, new MarkerOptions()
+            {
+                Position = new LatLngLiteral(spotMarker.Latitude, spotMarker.Longitude),
+                Map = _map1.InteropObject,
+                Title = spotMarker.Name,
+            });
+
+            await marker.AddListener("click", async () =>
+            {
+                var fullSpot = await AdminService.GetFishingSpotByIdAsync(spotMarker.Id);
+                if (fullSpot != null)
+                {
+                    var parameters = new DialogParameters { ["Spot"] = fullSpot };
+                    var dialog = await DialogService.ShowAsync<SpotInfoDialog>(fullSpot.Name, parameters);
+                    var result = await dialog.Result;
+                    if (!result.Canceled && result.Data is int spotId)
+                    {
+                        NavigationManager.NavigateTo($"/fishingSpot/{spotId}");
+                    }
+                }
+                else
+                {
+                    Snackbar.Add("Kunde inte hämta platsinformation", Severity.Error, config => config.VisibleStateDuration = 2000);
+                }
+            });
+
+            currentMarkers.Add(marker);
+        }
+    }
+
+    private static double GetDistanceInMeters(double lat1, double lon1, double lat2, double lon2)
+    {
+        var R = 6371e3;
+        var dLat = (lat2 - lat1) * Math.PI / 180.0;
+        var dLon = (lon2 - lon1) * Math.PI / 180.0;
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(lat1 * Math.PI / 180.0) * Math.Cos(lat2 * Math.PI / 180.0) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        return R * c;
+    }
+
+    public class LocationResult { public double Latitude { get; set; } public double Longitude { get; set; } }
+
+    public static MapTypeStyle[] MapStyle()
+    {
+        GoogleMapStyleBuilder style = new GoogleMapStyleBuilder();
+        style.AddStyle(@"[
+            { ""elementType"": ""labels.icon"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""administrative.land_parcel"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""administrative.neighborhood"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""poi"", ""elementType"": ""labels.text"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""poi.business"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""road"", ""elementType"": ""labels"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""road"", ""elementType"": ""labels.icon"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""road.arterial"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""road.highway"", ""elementType"": ""labels"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""road.local"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""transit"", ""stylers"": [ { ""visibility"": ""off"" } ] },
+            { ""featureType"": ""water"", ""elementType"": ""labels.text"", ""stylers"": [ { ""visibility"": ""off"" } ] }
+        ]");
+        return style.Build();
+    }
+}

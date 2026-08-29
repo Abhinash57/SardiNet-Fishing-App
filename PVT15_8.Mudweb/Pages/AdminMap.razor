@@ -1,0 +1,208 @@
+@page "/admin/map"
+@using GoogleMapsComponents
+@using GoogleMapsComponents.Maps
+@using PVT15_8.Shared.DTOs
+@using System.Reflection.Metadata
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject AdminService AdminService
+
+@attribute [Authorize(Roles = "Admin")]
+
+<MudPaper Elevation="3" Style="overflow:hidden; border-radius: 12px; height: 500px;">
+    <div style="position:relative; height:500px; width:100%;">
+        <GoogleMap @ref="_map1" Id="map1" Options="@_mapOptions" OnAfterInit="HandleAfterInit" />
+        <MudOverlay Absolute="true" Visible="true" Style="background:transparent; pointer-events:none;">
+            <MudIcon Icon="@Icons.Material.Filled.Add" Color="Color.Error" />
+        </MudOverlay>
+    </div>
+
+       
+</MudPaper>
+<MudAppBar  Class="d-flex justify-center align-center" Style="@($"background-color: {Colors.Gray.Lighten3};")">
+        <MudTextField @bind-Value="newSpotName" Label="Fishing Spot Name" Variant="Variant.Outlined"/>
+        <MudButton Variant="Variant.Text"OnClick="AddSpotFromCenter">Add Spot</MudButton>
+        <MudButton Variant="Variant.Text" OnClick="RemoveSpot">Remove Spot</MudButton>
+        <MudButton Variant="Variant.Text" OnClick="OpenEditDialog">Edit Spot</MudButton>
+  
+</MudAppBar>
+
+
+        
+@code {
+    private GoogleMap? _map1;
+    private List<Marker> mapMarkers = new();
+    private List<FishingSpotMarkerDTO> spots = new();
+    private string newSpotName = string.Empty;
+
+    
+    [Inject] IJSRuntime JS { get; set; } = default!;
+
+    private MapOptions _mapOptions = new()
+    {
+        Zoom = 10,
+        Center = new LatLngLiteral(59.3293, 18.0686),
+        MapTypeId = MapTypeId.Roadmap,
+        
+    };
+
+    private async Task HandleAfterInit()
+    {
+        if (_map1 is null)
+            return;
+        if (spots.Any()){
+            await RenderMarkers();
+        }
+        
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        spots = await AdminService.GetFishingSpots();
+    }
+
+    private async Task AddSpotFromCenter()
+    {
+        if (_map1 is null)
+            return;
+
+        var center = await _map1.InteropObject.GetCenter();
+
+        var spot = new FishingSpotMarkerDTO
+        {
+            Name = newSpotName,
+            Latitude = center.Lat,
+            Longitude = center.Lng
+        };
+
+        if (string.IsNullOrWhiteSpace(spot.Name))
+        {
+            Snackbar.Add("Fishingspot can't be null or empty", Severity.Error);
+            return;
+        }
+       
+        if (spots.Any(s => s.Name.Equals(spot.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            Snackbar.Add("A fishingspot with that name already exists", Severity.Error);
+            return;
+        }
+        spots.Add(spot);
+        await AdminService.CreateFishingSpotMarker(spot);
+        Snackbar.Add($"Fishingspot: {spot.Name} added at {spot.Latitude}, {spot.Longitude}", Severity.Success);
+
+        
+        await RenderMarkers();
+      
+        Console.WriteLine($"Added marker at {center.Lat}, {center.Lng}");
+    }
+
+    private async Task RemoveSpot()
+    {
+
+        var spotToRemove = spots.FirstOrDefault(m => m.Name == newSpotName);
+
+        Console.WriteLine($"Attempting to remove marker with name: {newSpotName}, {spotToRemove?.Id}, {spotToRemove?.Latitude}, {spotToRemove?.Longitude}");
+        if (spotToRemove != null)
+        {
+            await AdminService.DeleteFishingSpotMarker(spotToRemove.Id);
+            spots.Remove(spotToRemove);
+            await RenderMarkers();
+            Snackbar.Add($"Removed marker named {spotToRemove.Name} at {spotToRemove.Latitude}, {spotToRemove.Longitude}", Severity.Success);
+        }
+        else
+        {
+            Snackbar.Add("Can't remove a fishingspot that doesn't exist!", Severity.Error);
+            return;
+        }
+    }
+
+    private async Task EditSpot(string oldName, string newName, double lat, double lng){
+        var spot = spots.FirstOrDefault(s => s.Name.Equals(oldName, StringComparison.InvariantCultureIgnoreCase));
+
+        if(spot is null){
+            Snackbar.Add("Spot not found!", Severity.Error);
+            return;
+        }
+
+        spot.Name = newName;
+        spot.Latitude = lat;
+        spot.Longitude = lng;
+
+        await AdminService.UpdateFishingSpotMarker(spot.Id, spot);
+        await RenderMarkers();
+    }
+
+    private async Task OpenEditDialog()
+{
+    var selectedSpot = spots.FirstOrDefault(s =>
+        s.Name == newSpotName);
+
+    if (selectedSpot is null)
+    {
+        Snackbar.Add("Spot not found!", Severity.Error);
+        return;
+    }
+
+    var parameters = new DialogParameters
+    {
+        ["Spot"] = selectedSpot
+    };
+
+    var dialog = await DialogService.ShowAsync<EditSpotDialog>(
+        "Edit Spot",
+        parameters);
+
+    var result = await dialog.Result;
+
+    if (!result.Canceled)
+    {
+        var editedSpot = (FishingSpotMarkerDTO)result.Data;
+
+        await EditSpot(
+            selectedSpot.Name,
+            editedSpot.Name,
+            editedSpot.Latitude,
+            editedSpot.Longitude);
+    }
+}
+
+    private async Task RenderMarkers()
+    {
+        if (_map1 is null)
+        {
+            return;
+        }
+
+        foreach (var marker in mapMarkers)
+        {
+            await marker.SetMap(null);
+        }
+
+        mapMarkers.Clear();
+
+        foreach (var spot in spots)
+        {
+            Console.WriteLine($"Rendering marker for spot: {spot.Name} at {spot.Latitude}, {spot.Longitude}");
+            var marker = await Marker.CreateAsync(
+                _map1.JsRuntime,
+                new MarkerOptions
+                {
+                    Position = new LatLngLiteral(spot.Latitude, spot.Longitude),
+                    Map = _map1.InteropObject,
+                    Title = spot.Name
+                });
+
+              var infoWindow = await InfoWindow.CreateAsync(_map1.JsRuntime, new InfoWindowOptions()
+            {
+                Content = $@"<div style='padding:8px; min-width:150px;'><strong>{spot.Name}</strong><br/><a href='/admin/map/{spot.Id}'>Läs mer...</a></div>"
+            });
+
+            await marker.AddListener("click", async () =>
+            {
+                await infoWindow.Open(_map1.InteropObject, marker);
+            });
+            mapMarkers.Add(marker);
+        }
+    }
+
+}

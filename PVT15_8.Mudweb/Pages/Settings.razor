@@ -1,0 +1,65 @@
+@page "/settings"
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-4 pb-8">
+    <MudText Typo="Typo.subtitle1" Color="Color.Dark" Class="mb-2 ml-1">Konto</MudText>
+    <MudPaper Elevation="2" Class="mb-6 overflow-hidden">
+        <MudList T="string">
+            <MudListItem Href="profile/edit">
+                <div class="d-flex justify-space-between align-center">
+                    <div class="d-flex align-center gap-4">
+                        <MudIcon Icon="@Icons.Material.Filled.Person" Color="Color.Default" />
+                        <MudText>Redigera profil</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Surface" Class="opacity-50" />
+                </div>
+            </MudListItem>
+        </MudList>
+    </MudPaper>
+
+    <MudText Typo="Typo.subtitle1" Color="Color.Dark" Class="mb-2 ml-1">Juridik</MudText>
+    <MudPaper Elevation="2" Class="mb-6 overflow-hidden">
+        <MudList T="string">
+            <MudListItem Href="terms-of-service">
+                <div class="d-flex justify-space-between align-center">
+                    <div class="d-flex align-center gap-4">
+                        <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Default" />
+                        <MudText>Integritetspolicy</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Surface" Class="opacity-50" />
+                </div>
+            </MudListItem>
+        </MudList>
+    </MudPaper>
+
+    <MudText Typo="Typo.subtitle1" Color="Color.Dark" Class="mb-2 ml-1">Övrigt</MudText>
+    <MudPaper Elevation="2" Class="mb-6 overflow-hidden">
+        <MudList T="string">
+            <MudListItem Href="support">
+                <div class="d-flex justify-space-between align-center">
+                    <div class="d-flex align-center gap-4">
+                        <MudIcon Icon="@Icons.Material.Filled.HelpOutline" Color="Color.Default" />
+                        <MudText>Hjälp & Support</MudText>
+                    </div>
+                    <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Color="Color.Surface" Class="opacity-50" />
+                </div>
+            </MudListItem>
+        </MudList>
+    </MudPaper>
+
+    <MudButton OnClick="HandleLogout" Variant="Variant.Outlined" Color="Color.Error" StartIcon="@Icons.Material.Filled.Logout" FullWidth="true"
+               Class="mt-4 py-3">
+        Logga ut
+    </MudButton>
+
+</MudContainer>
+
+@code {
+    private async Task HandleLogout()
+    {
+        var customAuthStateProvider = (IdentityAuthenticationStateProvider)AuthStateProvider;
+        await customAuthStateProvider.LogoutAsync();
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}

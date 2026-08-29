@@ -1,0 +1,244 @@
+@page "/Register"
+@using System.Net.Http.Json
+@using PVT15_8.Shared
+@inject NavigationManager Navigation
+@inject HttpClient Http
+
+<PageTitle>Register</PageTitle>
+
+<MudContainer Class="px-0" MaxWidth="MaxWidth.ExtraSmall">
+    <MudPaper Elevation="4" Class="pa-0 pb-6">
+
+        <div class="d-flex justify-center">
+            <MudImage ObjectFit="ObjectFit.None" ObjectPosition="ObjectPosition.Center" Src="/Logga.png"
+                      Alt="SardiNet logga" />
+        </div>
+
+        <div class="d-flex justify-center">
+            <MudText Typo="Typo.h5"
+                     Style="align-self: center; margin-top: 1%; margin-bottom: 1%; text-shadow: 0px 0px 3px white; color: black;">
+                Skapa konto
+            </MudText>
+        </div>
+
+        <div class="d-flex justify-center">
+            <MudText Typo="Typo.body1" Style="align-self: center; text-shadow: 0px 0px 3px white; color: black;">
+                Fyll i dina uppgifter för att komma igång
+            </MudText>
+        </div>
+
+        @if (_registrationSuccessful)
+        {
+            <div class="px-8 pt-8">
+                <MudAlert Style="background-color: #3e79c7" Variant="Variant.Filled">
+                    Kolla din epost för att verifiera din mail!
+                    <div class="mt-2">
+                        <MudButton Variant="Variant.Filled"
+                                   Style="background-color: white; color: #3e79c7; text-transform: none;" FullWidth="true"
+                                   OnClick="NavigateFromRegisterToLogin">
+                            Gå till inloggning
+                        </MudButton>
+                    </div>
+                </MudAlert>
+            </div>
+        }
+        else
+        {
+            <div style="padding-left: 8%; padding-right: 8%; padding-top: 8%">
+
+                <MudText Typo="Typo.body1">Användarnamn</MudText>
+                <MudTextField @bind-Value="_request.Username" T="string" Variant="Variant.Outlined" Class="pb-2 pt-1"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Person" Required="true"
+                              RequiredError="Användarnamn krävs" Validation="@(new Func<string, string?>(ValidateUsername))" />
+                <MudText Typo="Typo.body1">Email</MudText>
+                <MudTextField @bind-Value="_request.Email" T="string" Variant="Variant.Outlined" Class="pb-2 pt-1"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Outlined.Mail" Required="true"
+                              RequiredError="Email krävs" Validation="@(new Func<string, string?>(ValidateEmail))" />
+
+                <MudText Typo="Typo.body1">Lösenord</MudText>
+                <MudTextField @bind-Value="_request.Password" T="string" Variant="Variant.Outlined" Class="pb-2 pt-1"
+                              InputType="@(passwordIsVisible ? InputType.Text : InputType.Password)"
+                              AdornmentIcon="@(passwordIsVisible ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)"
+                              OnAdornmentClick="TogglePassword" Adornment="Adornment.End" Required="true"
+                              RequiredError="Lösenord krävs" Validation="@(new Func<string, string?>(ValidatePassword))" />
+
+                <MudText Typo="Typo.body1">Bekräfta Lösenord</MudText>
+                <MudTextField @bind-Value="_confirmPassword" T="string" Variant="Variant.Outlined" Class="pb-2 pt-1"
+                              InputType="@(passwordIsVisible ? InputType.Text : InputType.Password)"
+                              AdornmentIcon="@(passwordIsVisible ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)"
+                              OnAdornmentClick="TogglePassword" Adornment="Adornment.End" Required="true"
+                              RequiredError="Lösenord" Validation="@(new Func<string, string?>(ValidateConfirmPassword))" />
+
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mt-2 mb-2">@_errorMessage</MudAlert>
+                }
+
+                <div class="d-flex align-center my-3">
+                    <MudCheckBox @bind-Value="_acceptedTerms" Color="Color.Default" Dense="true"></MudCheckBox>
+                    <MudText Typo="Typo.body2" Class="ml-2">
+                        Jag godkänner
+                        <span
+                        style="color: #3e79c7; margin-right: 4px; margin-left: 4px; font-weight: 500;">användarvillkoren</span>
+                        och
+                        <span style="color: #1b6ec2; margin-left: 4px; font-weight: 500;">integritetspolicyn</span>
+                    </MudText>
+                </div>
+            </div>
+
+            <div class="d-flex pt-1 px-8">
+                <MudButton Variant="Variant.Filled" DropShadow="true" FullWidth="true" Disabled="@_isProcessing"
+                           Style="text-transform: none; background-color: #3e79c7; color: white;" OnClick="HandleRegister"
+                           EndIcon="@Icons.Material.Filled.ArrowForward">
+                    @if (_isProcessing)
+                    {
+                        <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                        <MudText Class="ms-2">Skapar konto...</MudText>
+                    }
+                    else
+                    {
+                        <MudText>Skapa konto</MudText>
+                    }
+                </MudButton>
+            </div>
+
+            <div class="d-flex justify-center pt-5">
+                <MudText>Har du redan ett konto? <MudLink Href="/" Style="color: #3e79c7">Logga in</MudLink>
+                </MudText>
+            </div>
+        }
+
+        <MudImage Src="/Bottom_image_login.png" Style="display:block; width: 100%; max-width: 100%; margin-top: 20px;"
+                  alt="Fiskebåt" />
+
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private RegisterRequestUsername _request = new();
+    private string _confirmPassword = string.Empty;
+
+    private bool _isProcessing;
+    private string? _errorMessage;
+    private bool _registrationSuccessful;
+    private bool _acceptedTerms;
+    private bool passwordIsVisible;
+
+    private void TogglePassword()
+    {
+        passwordIsVisible = !passwordIsVisible;
+    }
+
+    private async Task HandleRegister()
+    {
+        _errorMessage = null;
+
+        if (string.IsNullOrWhiteSpace(_request.Email) || string.IsNullOrWhiteSpace(_request.Password) ||
+string.IsNullOrWhiteSpace(_request.Username))
+        {
+            _errorMessage = "Alla fält måste fyllas i.";
+            return;
+        }
+
+        if (_request.Password != _confirmPassword)
+        {
+            _errorMessage = "Lösenorden matchar inte.";
+            return;
+        }
+
+        if (!_acceptedTerms)
+        {
+            _errorMessage = "Du måste godkänna användarvillkoren.";
+            return;
+        }
+        _request.Username = _request.Username.Trim();
+        _request.Email = _request.Email.Trim();
+
+        _isProcessing = true;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("identity/account/register", _request);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _registrationSuccessful = true;
+            }
+            else
+            {
+                var errorResult = await response.Content.ReadFromJsonAsync<ValidationProblemDetails>();
+
+                if (errorResult?.Errors is not null && errorResult.Errors.Any())
+                {
+                    _errorMessage = string.Join(" ", errorResult.Errors.SelectMany(e => e.Value));
+                }
+                else
+                {
+                    _errorMessage = "Ett okänt fel uppstod vid registreringen.";
+                }
+            }
+        }
+        catch
+        {
+            _errorMessage = "Ett anslutningsfel uppstod. Kontrollera din internetuppkoppling.";
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private void NavigateFromRegisterToLogin()
+    {
+        Navigation.NavigateTo("/");
+    }
+
+    public class ValidationProblemDetails
+    {
+        public Dictionary<string, string[]> Errors { get; set; } = new();
+    }
+
+    private string? ValidateUsername(string? username)
+    {
+        if (string.IsNullOrWhiteSpace(username))
+            return "Användarnamn får inte vara tomt";
+
+        if (username.Trim().Length < 3)
+            return "Användarnamn måste vara minst 3 tecken";
+
+        return null;
+    }
+
+    private string? ValidateEmail(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return "Email krävs";
+
+        if (!email.Contains("@"))
+            return "Ogiltig emailadress";
+
+        return null;
+    }
+
+    private string? ValidatePassword(string? password)
+    {
+        if (string.IsNullOrWhiteSpace(password))
+            return "Lösenord krävs";
+
+        if (password.Length < 6)
+            return "Lösenordet måste vara minst 6 tecken";
+
+        return null;
+    }
+
+    private string? ValidateConfirmPassword(string? confirmPassword)
+    {
+        if (string.IsNullOrWhiteSpace(confirmPassword))
+            return "Bekräfta lösenordet";
+
+        if (confirmPassword != _request.Password)
+            return "Lösenorden matchar inte";
+
+        return null;
+    }
+}

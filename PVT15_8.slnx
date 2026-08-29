@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
+  <Project Path="PVT15_8.ApiService/PVT15_8.ApiService.csproj" />
+  <Project Path="PVT15_8.AppHost/PVT15_8.AppHost.csproj" />
+  <Project Path="PVT15_8.External/PVT15_8.External.csproj" />
+  <Project Path="PVT15_8.Gateway/PVT15_8.Gateway.csproj" />
+  <Project Path="PVT15_8.Identity/PVT15_8.Identity.csproj" />
+  <Project Path="PVT15_8.Media/PVT15_8.Media.csproj" />
+  <Project Path="PVT15_8.Mudweb/PVT15_8.Mudweb.csproj" />
+  <Project Path="PVT15_8.ServiceDefaults/PVT15_8.ServiceDefaults.csproj" />
+  <Project Path="PVT15_8.Shared/PVT15_8.Shared.csproj" Id="dd3d2e3d-499a-4c70-8a28-b433f3f36e04" />
+  <Project Path="PVT15_8.Tests/PVT15_8.Mudweb.Tests.csproj" />
+  <Project Path="PVT15_8.UnitTests/PVT15_8.ApiService.UnitTests.csproj" />
+</Solution>

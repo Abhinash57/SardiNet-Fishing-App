@@ -1,0 +1,182 @@
+@page "/savedSpots"
+@using PVT15_8.Shared.DTOs
+@using System.Net.Http.Json
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@attribute [Authorize]
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="my-4">
+    <div style="margin: 3%">
+        <MudText Typo="Typo.h5" Style="font-weight: bold; margin-bottom: 3%">Sparade platser</MudText>
+
+        @if (_isLoading)
+        {
+            <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="mt-8">
+                <MudProgressCircular Indeterminate="true" Color="Color.Primary" />
+            </MudStack>
+        }
+        else if (_spots.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                Du har inga sparade platser ännu.
+            </MudAlert>
+        }
+        else
+        {
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                @foreach (var item in _spots)
+                {
+                    var cardClass = (_spots.IndexOf(item) % 2 == 0)
+                        ? "card-even"
+                        : "card-odd";
+
+                    <MudItem xs="12" Style="width: 100%;">
+
+                        <MudCard Class="@($"{cardClass} clickable-card")"
+                                 Style="@($"border-radius: 16px; overflow: hidden; opacity: {(item.IsBookmarked ? "1" : "0.5")}; transition: opacity 0.3s ease;")">
+
+                            <MudStack Row="true" Spacing="0" AlignItems="AlignItems.Stretch"
+                                      @onclick="@(() => Nav.NavigateTo($"/fishingspot/{item.Spot.Id}"))">
+
+                                <MudImage Src="profil-bakgrund2.avif" ObjectFit="ObjectFit.Cover"
+                                          Style="width: 120px; height: 120px; flex-shrink: 0;" />
+
+                                <MudStack Justify="Justify.Center" Spacing="1" Class="pa-3" Style="flex: 1; overflow: hidden;">
+
+                                    <MudText Typo="Typo.h6" Class="font-weight-bold text-truncate">
+                                        @item.Spot.Name
+                                    </MudText>
+
+                                    <MudText Typo="Typo.body2" Class="description-collapsed">
+                                        @item.Spot.Description
+                                    </MudText>
+
+                                </MudStack>
+
+                                <div @onclick:stopPropagation="true" class="d-flex align-center pr-2">
+
+                                    <MudIconButton
+                                    Icon="@(item.IsBookmarked ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarOutline)"
+                                    Color="@(item.IsBookmarked ? Color.Primary : Color.Default)"
+                                    Disabled="@item.IsProcessing" OnClick="@(() => ToggleBookmarkAsync(item))" />
+
+                                </div>
+                            </MudStack>
+
+                        </MudCard>
+
+                    </MudItem>
+                }
+            </MudStack>
+        }
+    </div>
+</MudContainer>
+
+<style>
+    .clickable-card {
+        cursor: pointer;
+        transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+    }
+
+    .card-even {
+        background-color: white !important;
+        border: 1px solid rgba(0, 0, 0, 0.05);
+    }
+
+    .card-odd {
+        background-color: #2B7AE314 !important;
+        border: 1px solid rgba(0, 0, 0, 0.02);
+    }
+
+    .clickable-card:hover {
+        transform: scale(1.01);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    .description-collapsed {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-height: 3em;
+    }
+</style>
+
+@code {
+    private bool _isLoading = true;
+    private List<BookmarkViewModel> _spots = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var dtos = await Http.GetFromJsonAsync<List<FishingSpotSmallDTO>>("api/spots/bookmarked");
+            if (dtos != null)
+            {
+                _spots = dtos.Select(d => new BookmarkViewModel { Spot = d, IsBookmarked = true }).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Kunde inte hämta dina sparade platser.", Severity.Error);
+            Console.WriteLine(ex.Message);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ToggleBookmarkAsync(BookmarkViewModel item)
+    {
+        item.IsProcessing = true;
+
+        try
+        {
+            if (item.IsBookmarked)
+            {
+                var response = await Http.DeleteAsync($"api/spots/bookmarked/{item.Spot.Id}");
+                if (response.IsSuccessStatusCode)
+                {
+                    item.IsBookmarked = false;
+                    Snackbar.Add($"{item.Spot.Name} borttagen. Klicka på stjärnan igen för att ångra.", Severity.Info);
+                }
+                else
+                {
+                    Snackbar.Add("Kunde inte ta bort platsen.", Severity.Error);
+                }
+            }
+            else
+            {
+                var response = await Http.PostAsync($"api/spots/bookmarked?id={item.Spot.Id}", null);
+                if (response.IsSuccessStatusCode)
+                {
+                    item.IsBookmarked = true;
+                    Snackbar.Add($"{item.Spot.Name} sparad igen.", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("Kunde inte spara platsen.", Severity.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Ett fel uppstod när platsen skulle uppdateras.", Severity.Error);
+            Console.WriteLine(ex.Message);
+        }
+        finally
+        {
+            item.IsProcessing = false;
+        }
+    }
+
+    public class BookmarkViewModel
+    {
+        public required FishingSpotSmallDTO Spot { get; set; }
+        public bool IsBookmarked { get; set; }
+        public bool IsProcessing { get; set; }
+    }
+}

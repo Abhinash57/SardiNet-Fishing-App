@@ -1,0 +1,253 @@
+@page "/profile/edit"
+@using PVT15_8.Shared
+@using System.Security.Claims
+@attribute [Authorize]
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ProfileService ProfileService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject MediaApiClient MediaClient
+
+<PageTitle>Redigera Profil</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="pa-4">
+    @if (_isLoading)
+    {
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="mt-12">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        </MudStack>
+    }
+    else if (_profile != null)
+    {
+        <MudPaper Elevation="0" Class="pa-4 rounded-lg" Style="border: 1px solid #e2e8f0;">
+            
+            <MudStack AlignItems="AlignItems.Center" Spacing="4" Class="mb-8">
+                <AuthorizeView>
+                    <Authorized>
+                        <MudAvatar Color="Color.Primary" Style="height: 90px; width: 90px; border: 2px solid white; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);">
+                            @if (!string.IsNullOrEmpty(_previewImageUrl))
+                            {
+                                <MudImage Src="@_previewImageUrl" ObjectFit="ObjectFit.Cover" />
+                            }
+                            else
+                            {
+                                <MudText Style="text-transform: capitalize" Typo="Typo.h4">@(@context.User.Identity?.Name!.FirstOrDefault() ?? '?')</MudText>
+                            }
+                        </MudAvatar>
+                    </Authorized>
+                </AuthorizeView>
+
+                <MudFileUpload T="IBrowserFile" FilesChanged="HandleImageUpload" Accept=".png, .jpg, .jpeg" Disabled="@_isProcessing">
+                    <MudButton HtmlTag="label"
+                               Variant="Variant.Filled"
+                               StartIcon="@Icons.Material.Filled.PhotoCamera"
+                               Disabled="@_isProcessing">
+                        Välj ny bild
+                    </MudButton>
+                </MudFileUpload>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Max 5MB. Format: JPG, PNG.</MudText>
+            </MudStack>
+
+            <MudTextField @bind-Value="_profile.DisplayName"
+                          Label="Användarnamn"
+                          Variant="Variant.Outlined"
+                          Lines="1"
+                          MaxLength="25"
+                          Counter="25"
+                          Required
+                          RequiredError="Användarnamn krävs"
+                          Immediate="true"
+                          Disabled="@_isProcessing" />
+
+            <MudTextField @bind-Value="_profile.Bio"
+                          Label="Biografi"
+                          Variant="Variant.Outlined"
+                          Lines="5"
+                          MaxLength="250"
+                          Counter="250"
+                          Immediate="true"
+                          Placeholder="Berätta lite om dig själv och ditt fiskeintresse..."
+                          Disabled="@_isProcessing" />
+
+            <MudButton Variant="Variant.Filled"
+                       Style="background-color: #3e79c7; color: white;"
+                       FullWidth="true"
+                       Class="mt-6 py-2 rounded-lg"
+                       OnClick="SaveChanges"
+                       Disabled="@_isProcessing">
+                @if (_isProcessing)
+                {
+                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                    <MudText Class="ms-2">Sparar...</MudText>
+                }
+                else
+                {
+                    <MudText>Spara ändringar</MudText>
+                }
+            </MudButton>
+
+        </MudPaper>
+
+        <MudPaper Elevation="0" Class="pa-4 mt-4 rounded-lg" Style="border: 1px solid #fc8181; background-color: #fff5f5;">
+            <MudText Typo="Typo.h6" Color="Color.Error" Class="mb-2" Style="font-weight: 700;">Integritet och Data</MudText>
+            <MudText Typo="Typo.body2" Class="mb-4" Style="color: #c53030;">
+                Här kan du radera ditt konto och all data som är kopplat.
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Error"
+                       StartIcon="@(_isProcessing ? null : Icons.Material.Filled.DeleteForever)"
+                       OnClick="ConfirmDeleteData"
+                       Disabled="@_isProcessing">
+                @if (_isProcessing)
+                {
+                    <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                    <MudText Class="ms-2">Raderar konto...</MudText>
+                }
+                else
+                {
+                    <MudText>Radera all min data</MudText>
+                }
+            </MudButton>
+        </MudPaper>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">Kunde inte ladda din profil.</MudAlert>
+    }
+</MudContainer>
+
+    @code {
+    private bool _isLoading = true;
+    private bool _isProcessing;
+
+    private ProfileDTO _profile = new();
+    private string? _previewImageUrl;
+    private IBrowserFile? _newProfileImage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var profile = await ProfileService.GetProfileAsync();
+        if (profile is not null)
+        {
+            _profile = profile;
+            _previewImageUrl = profile.ProfilePictureUrl;
+        }
+
+        _isLoading = false;
+    }
+
+    private async Task HandleImageUpload(IBrowserFile? file)
+    {
+        if (file is null) return;
+
+        if (file.Size > 5120000)
+        {
+            Snackbar.Add("Bilden är för stor. Max 5MB tillåtet.", Severity.Error);
+            return;
+        }
+
+        _newProfileImage = file;
+
+        var buffers = new byte[file.Size];
+        await file.OpenReadStream(maxAllowedSize: 5120000).ReadAsync(buffers);
+        _previewImageUrl = $"data:{file.ContentType};base64,{Convert.ToBase64String(buffers)}";
+    }
+
+    private async Task SaveChanges()
+    {
+
+        if (string.IsNullOrEmpty(_profile.DisplayName)) 
+        {
+            Snackbar.Add("Användarnamn får inte vara tom", Severity.Error);
+            return;
+        }
+
+        _isProcessing = true;
+        string? finalImageUrl = _profile.ProfilePictureUrl;
+
+        try
+        {
+            if (_newProfileImage != null)
+            {
+                var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+                var userId = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                if (string.IsNullOrEmpty(userId))
+                {
+                    Snackbar.Add("Kunde inte verifiera användar-ID.", Severity.Error);
+                    return;
+                }
+
+                var formData = new Dictionary<string, string> { { "userId", userId } };
+
+                finalImageUrl = await MediaClient.UploadImageAsync("/media/images/profile-picture", _newProfileImage, formData);
+            }
+
+            var request = new UpdateProfileRequest(_profile.DisplayName, _profile.Bio, finalImageUrl);
+            var success = await ProfileService.UpdateProfileAsync(request);
+
+            if (success)
+            {
+                Snackbar.Add("Din profil har uppdaterats!", Severity.Success);
+                Navigation.NavigateTo("/profile");
+            }
+            else
+            {
+                Snackbar.Add("Något gick fel vid uppdateringen.", Severity.Error);
+            }
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Ett fel uppstod när profilen skulle sparas.", Severity.Error);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task ConfirmDeleteData()
+    {
+        bool? result = await DialogService.ShowMessageBoxAsync(
+            "Är du helt säker?",
+            "Detta kommer att radera ditt konto och all sparad data. Detta går inte att ångra.",
+            yesText: "Ja, radera allt", cancelText: "Avbryt");
+
+        if (result == true)
+        {
+            _isProcessing = true;
+            
+            try
+            {
+                var success = await ProfileService.DeleteProfileWithDataAsync();
+
+                if (success)
+                {
+                    Snackbar.Add("Din data har raderats.", Severity.Warning);
+                    await HandleLogout();
+                }
+                else
+                {
+                    Snackbar.Add("Kunde inte radera kontot.", Severity.Error);
+                }
+            }
+            catch (Exception)
+            {
+                Snackbar.Add("Ett fel uppstod vid radering av kontot.", Severity.Error);
+            }
+            finally
+            {
+                _isProcessing = false;
+            }
+        }
+    }
+
+    private async Task HandleLogout()
+    {
+        var customAuthStateProvider = (IdentityAuthenticationStateProvider)AuthStateProvider;
+        await customAuthStateProvider.LogoutAsync();
+
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}

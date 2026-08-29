@@ -1,0 +1,156 @@
+@page "/review"
+@using PVT15_8.Shared.DTOs
+@using System.Security.Claims
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthStateProvider
+@inject AdminService AdminService
+@inject NavigationManager NavigationManager
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="my-8" Style="padding-bottom: 80px;">
+
+    <MudText Typo="Typo.h6" Class="pb-4">Skapa recension</MudText>
+
+
+    <MudPaper Style="Background-color: #F5F5F5;" MinHeight="200px" Class="pt-4 mb-6 pb-4">
+        <MudCard Style="Background-color: #FFF; border: 1px solid #00000046" Class="pt-2 pb-2 ml-2 mr-2 mb-4">
+            <MudSelect T="int?" Class="ml-2 mr-2"
+            @bind-Value="fishingSpotId"
+            Variant="Variant.Text" Placeholder="Välj en fiskeplats... ">
+                @foreach (var spot in fishingSpotsList)
+                {
+                    <MudSelectItem T="int?" Value="@spot.Id">@spot.Name</MudSelectItem>
+                }
+            </MudSelect>
+
+        </MudCard>
+
+        <MudCard Class="mb-4 pt-1 pb-1 ml-2 mr-2" Style="border: 1px solid #00000046;">
+            <MudStack Row="true" Class="ml-2">
+
+                <MudText>Rating: </MudText>
+                <MudRating @bind-SelectedValue="ratingValue"></MudRating>
+            </MudStack>
+        </MudCard>
+        <MudTextField T="string" Variant="Variant.Outlined" Class="mb-3 ml-2 mr-2" Style="Background-color: #FFF;"
+                      Lines="5" Placeholder="Beskrivning" Sizing="InputSizing.Fixed" @bind-Value="commentValue"></MudTextField>
+
+    </MudPaper>
+    <div class="d-flex justify-center">
+        <MudButton Style="border: 1px solid #00000046;" EndIcon="@Icons.Material.Filled.Image" Disabled="submitting"
+                   OnClick="SubmitReview">
+            @if (submitting)
+            {
+                <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                <MudText Class="ms-2">Publicerar...</MudText>
+            }
+            else
+            {
+                <MudText>Publicera recension</MudText>
+            }
+        </MudButton>
+    </div>
+</MudContainer>
+
+
+
+@code {
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "fishingSpotId")]
+    public int? InitialFishingSpotId { get; set; }
+    private int ratingValue;
+    private string? commentValue;
+    private int currentFishingSpot;
+    private bool submitting = false;
+    private FishingSpotDTO? fishingSpot;
+    private List<FishingSpotMarkerDTO> fishingSpotsList = new();
+
+
+    private string? currentUserId;
+    private int? fishingSpotId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDropdownData();
+        await LoadCurrentUser();
+        if (InitialFishingSpotId.HasValue)
+        {
+            fishingSpotId = InitialFishingSpotId;
+        }
+    }
+    private async Task SubmitReview()
+    {
+        if (fishingSpotId == null || fishingSpotId == 0)
+        {
+            Snackbar.Add("Vänligen välj en fiskeplats!", Severity.Error);
+            return;
+        }
+
+        if (ratingValue == 0)
+        {
+            Snackbar.Add("Vänligen välj ett betyg innan du publicerar!", Severity.Error);
+            return;
+        }
+        submitting = true;
+
+        var newReview = new RequestReviewDTO
+        {
+            UserId = currentUserId,
+            FishingSpotId = fishingSpotId.Value,
+            Rating = ratingValue,
+            Comment = commentValue
+        };
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/reviews", newReview);
+
+            if (response.IsSuccessStatusCode)
+            {
+                Snackbar.Add("Recensionen har publicerats!", Severity.Success);
+
+                ratingValue = 0;
+                commentValue = string.Empty;
+            }
+            else
+            {
+                Snackbar.Add("Något gick fel. Försök igen senare.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Ett fel uppstod: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            submitting = false;
+        }
+            NavigationManager.NavigateTo("/reviews");
+
+    }
+
+    private async Task LoadDropdownData()
+    {
+        try
+        {
+            var spots = await Http.GetFromJsonAsync<List<FishingSpotDTO>>("/api/fishingspots") ?? new();
+            fishingSpotsList = spots.Select(s => new FishingSpotMarkerDTO { Id = s.Id, Name = s.Name }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Error", Severity.Error);
+            StateHasChanged();
+        }
+    }
+
+
+    private async Task LoadCurrentUser()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+        currentUserId = user.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? user.Identity?.Name ?? "unknown";
+    }
+
+
+}

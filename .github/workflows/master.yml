@@ -1,0 +1,28 @@
+name: Deploy Aspire Project
+
+on:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Restore Dependencies
+        run: dotnet restore PVT15_8.slnx
+
+      - name: Run Unit Tests
+        run: dotnet test PVT15_8.slnx --no-restore --verbosity normal
+
+      - name: Build Aspire AppHost
+        run: dotnet build PVT15_8.slnx -c Debug
+
+      - name: Publish Blazor WASM
+        run: dotnet publish PVT15_8.Mudweb/PVT15_8.Mudweb.csproj -c Release -o /home/imon/published-blazor
+
+      - name: Restart Aspire Systemd Service
+        run: sudo systemctl restart pvt-aspire-app.service

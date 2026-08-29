@@ -1,0 +1,520 @@
+@page "/fishingSpot/{Id:int}"
+@using PVT15_8.Shared.DTOs
+@using GoogleMapsComponents
+@using GoogleMapsComponents.Maps
+@using System.Globalization
+@using System.Net.Http.Json
+@inject NavigationManager NavigationManager
+@inject WeatherApiClient WeatherApiClient
+@inject AdminService AdminService
+@inject HttpClient HttpClient
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+@attribute [Authorize]
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall">
+    <MudStack AlignItems="AlignItems.Center" Spacing="4" Class="pt-3 pb-3 w-100">
+
+        <div class="paper-border" style="width: 100%; min-width: 100%;">
+            <MudPaper Height="250px" Width="100%" Elevation="4" Class="overflow-hidden">
+                @if (fishingSpot is not null)
+                {
+                    <GoogleMap @ref="_map1" Id="map1" Options="@_mapOptions" OnAfterInit="HandleAfterInit" />
+                }
+                else
+                {
+                    <MudProgressLinear Color="Color.Info" Indeterminate="true" />
+                }
+            </MudPaper>
+        </div>
+
+        <MudStack Row="true" Spacing="6" Justify="Justify.Center" Class="py-2 w-100">
+            <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                <MudIconButton OnClick="ToggleBookmarkAsync"
+                               Icon="@(_isBookmarked ? Icons.Material.Filled.Bookmark : Icons.Material.Outlined.BookmarkBorder)"
+                               Color="@(_isBookmarked ? Color.Primary : Color.Dark)" Disabled="@_isProcessing"
+                               Style="box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); border-radius: 50%;" />
+                <MudText Typo="Typo.caption">Spara</MudText>
+            </MudStack>
+
+            <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                <MudIconButton Icon="@Icons.Material.Outlined.ModeComment" Color="Color.Dark"
+                               Style="box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); border-radius: 50%;"
+                               OnClick="HandleRedirectReview" />
+                <MudText Typo="Typo.caption">Kommentera</MudText>
+            </MudStack>
+
+            <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                <MudIconButton Icon="@Icons.Material.Filled.InsertComment" Color="Color.Dark"
+                               Style="box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2); border-radius: 50%;"
+                               OnClick="HandleRedirectCatches" />
+                <MudText Typo="Typo.caption">Forum</MudText>
+            </MudStack>
+        </MudStack>
+
+
+        <div class="w-100" style="margin-top: -8px;">
+            <MudButton Variant="Variant.Filled" Style="background-color: #FFF;" EndIcon="@Icons.Material.Filled.OpenInNew" OnClick="OpenGoogleMapsDirections"
+                       FullWidth="true" Size="MudBlazor.Size.Large" Class="my-2">
+                Öppna rutt i Google Maps
+            </MudButton>
+        </div>
+
+        <MudTabs ApplyEffectsToContainer="true" Class="disable-caps w-100" Centered="true">
+            @if (!fishingSpot?.IsForbidden ?? true)
+            {
+                <MudTabPanel Text="Platsinfo">
+                    <MudPaper Class="pa-4 my-2 paper-border" Elevation="0">
+                        <MudText Typo="Typo.h5" Class="mb-2">@fishingSpot?.Name</MudText>
+                        <MudText Typo="Typo.body1" Class="mb-1">@fishingSpot?.Description</MudText>
+
+                        @if (fishingSpot?.Depth.HasValue ?? false)
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-1">
+                                Djup: @fishingSpot.Depth m
+                            </MudText>
+                        }
+                        <MudDivider Class="my-3" />
+                        <MudText Typo="Typo.h6" Class="mb-2">Väder just nu</MudText>
+                        <MudCard class="paper-border pa-3" style="width: 100%; min-width: 100%;">
+                            @if (weather is not null && weather.Forecasts.Any())
+                            {
+                                var current = weather.Forecasts.First();
+
+
+                                @if (_weatherLoading)
+                                {
+                                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="MudBlazor.Size.Small" />
+                                }
+                                else
+                                {
+                                    <div class="d-flex align-center gap-2">
+                                        <MudText Typo="Typo.h6" Style="font-weight: 600;">@current.TemperatureC °C</MudText>
+                                        <MudIcon Icon="@GetWeatherIcon(current.SymbolCode)"
+                                                 Color="@GetWeatherColor(current.SymbolCode)" Size="MudBlazor.Size.Large" />
+                                    </div>
+                                }
+                            }
+                        </MudCard>
+
+                        @if (fishingSpot?.FishSpecies?.Any() ?? false)
+                        {
+                            <MudDivider Class="my-3" />
+                            <MudText Typo="Typo.h6" Class="mb-2">Fiskarter</MudText>
+                            <MudStack Spacing="2">
+                                @foreach (var fish in fishingSpot.FishSpecies.OrderByDescending(fs => fs.Frequency))
+                                {
+                                    <MudPaper Class="pa-3 paper-border" Elevation="0">
+                                            <MudAvatar Color="Color.Primary" Style="width:52px;height:52px;border-radius:8px;">
+                                                <MudIcon Icon="@Icons.Material.Outlined.SetMeal" />
+                                            </MudAvatar>
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                                            <MudStack Spacing="0" Style="flex:1;">
+                                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                                    <MudText Typo="Typo.subtitle1" Style="font-weight:600;">@fish.Name</MudText>
+                                                    <MudChip T="string" Size="MudBlazor.Size.Small"
+                                                             Color="@GetFrequencyColor(fish.Frequency)"
+                                                             Style="font-size:0.7rem; height:22px;">
+                                                        @GetFrequencyLabel(fish.Frequency)
+                                                    </MudChip>
+                                                </MudStack>
+                                                <MudStack Row="true" Spacing="1" Class="mt-1">
+                                                    @for (int i = 0; i < 3; i++)
+                                                    {
+                                                        int index = i;
+                                                        bool filled = GetFrequencyFilled(fish.Frequency, index);
+                                                        <div
+                                                            style="height:6px; width:32px; border-radius:3px;
+                                                            background-color:@(filled ? GetFrequencyHex(fish.Frequency) : "#e0e0e0");">
+                                                        </div>
+                                                    }
+                                                </MudStack>
+                                            </MudStack>
+                                        </MudStack>
+                                    </MudPaper>
+                                }
+                            </MudStack>
+                        }
+
+                        @if (fishingSpot?.RecommendedLures?.Any() ?? false)
+                        {
+                            <MudDivider Class="my-3" />
+                            <MudText Typo="Typo.h6" Class="mb-2">Rekommenderade beten</MudText>
+                            <MudStack Spacing="2">
+                                @foreach (var lure in fishingSpot.RecommendedLures)
+                                {
+                                    <MudPaper Class="pa-3 paper-border" Elevation="0">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                                                <MudAvatar Color="Color.Secondary" Style="width:52px;height:52px;border-radius:8px;">
+                                                    <MudIcon Icon="@Icons.Material.Outlined.Phishing" />
+                                                </MudAvatar>
+                                            <MudStack Spacing="0" Style="flex:1;">
+                                                <MudText Typo="Typo.subtitle1" Style="font-weight:600;">@lure.Name</MudText>
+                                                @if (!string.IsNullOrEmpty(lure.Type))
+                                                {
+                                                    <MudText Typo="Typo.caption" Style="color:#888;">@lure.Type</MudText>
+                                                }
+                                                @if (lure.SpeciesNames?.Any() ?? false)
+                                                {
+                                                    <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="1" Class="mt-1">
+                                                        @foreach (var s in lure.SpeciesNames)
+                                                        {
+                                                            <MudChip T="string" Size="MudBlazor.Size.Small" Variant="Variant.Outlined"
+                                                                     Style="font-size:0.68rem; height:20px;">
+                                                                @s.Name
+                                                            </MudChip>
+                                                        }
+                                                    </MudStack>
+                                                }
+                                            </MudStack>
+                                        </MudStack>
+                                    </MudPaper>
+                                }
+                            </MudStack>
+                        }
+
+                    </MudPaper>
+                </MudTabPanel>
+            }
+
+            <MudTabPanel Text="Regler">
+                <MudPaper Class="pa-4 my-2 paper-border" Elevation="0">
+                    <MudText Typo="Typo.h6" Class="mb-3">Regler för @fishingSpot?.Name</MudText>
+
+                    @if (fishingSpot?.IsForbidden ?? false)
+                    {
+                        <MudAlert Severity="Severity.Error" Class="mb-2">
+                            Det är förbjudet att fiska på den här platsen.
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        @if (fishingSpot?.HasRules ?? false)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense Variant="Variant.Outlined" Class="mb-2">
+                                Den här fiskeplatsen har särskilda regler. Kontrollera vad som gäller innan du börjar fiska.
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Success" Variant="Variant.Outlined" Dense Class="mb-2">Den här
+                                fiskeplatsen har inga särskilda regler.</MudAlert>
+                            }
+
+                            @if (fishingSpot?.IsFishingCardRequired ?? false)
+                            {
+                                <MudAlert Severity="Severity.Warning" Dense Variant="Variant.Outlined" Class="mb-2">
+                                    Fiskekort krävs för att få fiska på den här platsen.
+                                </MudAlert>
+                            }
+                            else
+                            {
+                                <MudAlert Severity="Severity.Success" Dense Class="mb-2">
+                                    Inget fiskekort krävs för den här platsen.
+                                </MudAlert>
+                            }
+                        }
+                    </MudPaper>
+                </MudTabPanel>
+            </MudTabs>
+
+        </MudStack>
+    </MudContainer>
+
+    <style>
+        .disable-caps {
+            text-transform: none !important;
+        }
+
+        #map1 {
+            height: 100% !important;
+            width: 100% !important;
+            display: block;
+            pointer-events: none;
+            cursor: default;
+        }
+
+        .paper-border {
+            border: 2px solid #CCC;
+            border-radius: 5px;
+            box-shadow: none;
+        }
+    </style>
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private GoogleMap? _map1;
+    private List<FishingSpotMarkerDTO> _spots = [];
+    private FishingSpotDTO? fishingSpot;
+
+    private bool _isBookmarked = false;
+    private bool _isProcessing = false;
+
+    private bool _weatherLoading = true;
+    private WeatherResultDto? weather;
+
+    private readonly MapOptions _mapOptions = new()
+    {
+        Zoom = 12,
+        Center = new LatLngLiteral(0, 0),
+        MapTypeId = MapTypeId.Roadmap,
+        DisableDefaultUI = true,
+        ZoomControl = false,
+        Styles = MapStyle(),
+    };
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        _spots = await AdminService.GetFishingSpots() ?? [];
+        fishingSpot = await AdminService.GetFishingSpotByIdAsync(Id);
+
+        if (fishingSpot is not null)
+        {
+            _mapOptions.Center = new LatLngLiteral(fishingSpot.Latitude, fishingSpot.Longitude);
+
+            var fetchedWeather = await WeatherApiClient.GetSmhiForecastAsync(fishingSpot.Longitude, fishingSpot.Latitude);
+            if (fetchedWeather != null)
+            {
+                weather = fetchedWeather;
+            }
+
+            _weatherLoading = false;
+
+            try
+            {
+                var bookmarkedSpots = await HttpClient.GetFromJsonAsync<List<FishingSpotSmallDTO>>("api/spots/bookmarked");
+                if (bookmarkedSpots != null && bookmarkedSpots.Any(s => s.Id == Id))
+                {
+                    _isBookmarked = true;
+                    StateHasChanged();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Kunde inte ladda bokmärkesstatus: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task ToggleBookmarkAsync()
+    {
+        if (fishingSpot == null) return;
+
+        _isProcessing = true;
+
+        try
+        {
+            if (_isBookmarked)
+            {
+                var response = await HttpClient.DeleteAsync($"api/spots/bookmarked/{Id}");
+                if (response.IsSuccessStatusCode)
+                {
+                    _isBookmarked = false;
+                    Snackbar.Add($"{fishingSpot.Name} borttagen från sparade platser.", Severity.Info);
+                }
+                else
+                {
+                    Snackbar.Add("Kunde inte ta bort platsen.", Severity.Error);
+                }
+            }
+            else
+            {
+                var response = await HttpClient.PostAsync($"api/spots/bookmarked?id={Id}", null);
+                if (response.IsSuccessStatusCode)
+                {
+                    _isBookmarked = true;
+                    Snackbar.Add($"{fishingSpot.Name} är nu sparad.", Severity.Success);
+                }
+                else
+                {
+                    Snackbar.Add("Kunde inte spara platsen.", Severity.Error);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add("Ett fel uppstod när platsen skulle uppdateras.", Severity.Error);
+            Console.WriteLine(ex.Message);
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    private async Task HandleAfterInit()
+    {
+        if (_map1 is not null && fishingSpot is not null)
+        {
+            var center = new LatLngLiteral(fishingSpot.Latitude, fishingSpot.Longitude);
+            await _map1.InteropObject.SetCenter(center);
+            await _map1.InteropObject.SetZoom(12);
+        }
+        await RenderMarkers();
+    }
+
+    private async Task RenderMarkers()
+    {
+        if (_map1 is null || fishingSpot is null || !_spots.Any())
+        {
+            return;
+        }
+
+        await Marker.CreateAsync(_map1.JsRuntime, new MarkerOptions()
+        {
+            Position = new LatLngLiteral(fishingSpot.Latitude, fishingSpot.Longitude),
+            Map = _map1.InteropObject,
+            Title = fishingSpot.Name,
+        });
+    }
+
+
+
+    private void HandleRedirectReview()
+    {
+        NavigationManager.NavigateTo($"/review?fishingSpotId={Id}");
+    }
+
+    private void HandleRedirectCatches()
+    {
+        NavigationManager.NavigateTo("/catches");
+    }
+
+    // Opens Google Maps directions
+    private void OpenGoogleMapsDirections()
+    {
+        if (fishingSpot == null) return;
+
+        string url = MapHelper.GenerateDirectionsUrl(fishingSpot.Latitude, fishingSpot.Longitude);
+        JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private Color GetFrequencyColor(FishSpeciesFrequency freq) => freq switch
+    {
+        FishSpeciesFrequency.High => Color.Success,
+        FishSpeciesFrequency.Medium => Color.Warning,
+        FishSpeciesFrequency.Low => Color.Error,
+        _ => Color.Default
+    };
+
+    private string GetFrequencyHex(FishSpeciesFrequency freq) => freq switch
+    {
+        FishSpeciesFrequency.High => "#4caf50",
+        FishSpeciesFrequency.Medium => "#ff9800",
+        FishSpeciesFrequency.Low => "#f44336",
+        _ => "#9e9e9e"
+    };
+
+    private string GetFrequencyLabel(FishSpeciesFrequency freq) => freq switch
+    {
+        FishSpeciesFrequency.High => "Hög förekomst",
+        FishSpeciesFrequency.Medium => "Medel förekomst",
+        FishSpeciesFrequency.Low => "Låg förekomst",
+        _ => "Okänd"
+    };
+
+    private bool GetFrequencyFilled(FishSpeciesFrequency freq, int index) => freq switch
+    {
+        FishSpeciesFrequency.High => true,
+        FishSpeciesFrequency.Medium => index < 2,
+        FishSpeciesFrequency.Low => index < 1,
+        _ => false
+    };
+
+    public static MapTypeStyle[] MapStyle()
+    {
+        GoogleMapStyleBuilder style = new GoogleMapStyleBuilder();
+        style.AddStyle(@"[
+      {
+        ""elementType"": ""labels.icon"",
+        ""stylers"": [ { ""visibility"": ""off"" } ]
+      },
+      {
+        ""featureType"": ""administrative.land_parcel"",
+        ""stylers"": [ { ""visibility"": ""off"" } ]
+      },
+      {
+        ""featureType"": ""administrative.neighborhood"",
+        ""stylers"": [ { ""visibility"": ""off"" } ]
+      },
+      {
+        ""featureType"": ""poi"",
+        ""elementType"": ""labels.text"",
+        ""stylers"": [ { ""visibility"": ""off"" } ]
+      },
+      {
+        ""featureType"": ""poi.business"",
+        ""stylers"": [ { ""visibility"": ""off"" } ]
+      },
+      {
+        ""featureType"": ""road"",
+        ""elementType"": ""labels"",
+        ""stylers"": [ { ""visibility"": ""off"" } ]
+      },
+      {
+        ""featureType"": ""road"",
+        ""elementType"": ""labels.icon"",
+        ""stylers"": [ { ""visibility"": ""off"" } ]
+      },
+      {
+        ""featureType"": ""road.highway"",
+        ""elementType"": ""labels"",
+        ""stylers"": [ { ""visibility"": ""off"" } ]
+      },
+      {
+        ""featureType"": ""transit"",
+        ""stylers"": [ { ""visibility"": ""off"" } ]
+      },
+      {
+        ""featureType"": ""water"",
+        ""elementType"": ""labels.text"",
+        ""stylers"": [ { ""visibility"": ""on"" } ]
+      }
+    ]");
+        return style.Build();
+    }
+
+    private string GetWeatherIcon(int? smhiSymbolCode)
+    {
+        return smhiSymbolCode switch
+        {
+            >= 1 and <= 3 => Icons.Material.Filled.WbSunny,
+            >= 4 and <= 7 => Icons.Material.Filled.Cloud,
+            >= 8 and <= 10 => Icons.Material.Filled.WaterDrop,
+            11 => Icons.Material.Filled.Thunderstorm,
+            >= 12 and <= 17 => Icons.Material.Filled.AcUnit,
+            >= 18 and <= 20 => Icons.Material.Filled.WaterDrop,
+            21 => Icons.Material.Filled.Thunderstorm,
+            >= 22 and <= 27 => Icons.Material.Filled.AcUnit,
+            _ => Icons.Material.Filled.QuestionMark
+        };
+    }
+
+    private Color GetWeatherColor(int? smhiSymbolCode)
+    {
+        return smhiSymbolCode switch
+        {
+            >= 1 and <= 3 => Color.Warning,
+            >= 4 and <= 7 => Color.Default,
+            >= 8 and <= 10 => Color.Info,
+            11 => Color.Default,
+            >= 12 and <= 20 => Color.Info,
+            21 => Color.Default,
+            >= 22 and <= 27 => Color.Info,
+            _ => Color.Default
+        };
+    }
+
+    public static class MapHelper
+    {
+        public static string GenerateDirectionsUrl(double destLat, double destLng)
+        {
+            string destination =
+$"{destLat.ToString(CultureInfo.InvariantCulture)},{destLng.ToString(CultureInfo.InvariantCulture)}";
+            return $"https://www.google.com/maps/dir/?api=1&destination={destination}";
+        }
+    }
+}

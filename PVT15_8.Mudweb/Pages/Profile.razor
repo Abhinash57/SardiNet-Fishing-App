@@ -1,0 +1,209 @@
+@page "/profile"
+@using PVT15_8.Shared
+@using PVT15_8.Shared.DTOs
+@attribute [Authorize]
+@inject ProfileService ProfileService
+@inject NavigationManager Navigation
+
+<PageTitle>Min Profil</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraSmall" Class="pa-0">
+
+    @if (_isLoading)
+    {
+        <MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Style="height: 100vh;">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText>Laddar profil...</MudText>
+        </MudStack>
+    }
+    else if (_userProfile != null)
+    {
+        <div style="background: url('profil-bakgrund2.avif');
+            background-size: cover;
+            background-position: center;
+            height: 340px;
+            display: flex;
+            align-items: center;
+            padding: 1rem;">
+            
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="4" Class="w-100">
+            
+                <AuthorizeView>
+                    <Authorized>
+                        <MudBadge OnClick='() => Navigation.NavigateTo("/profile/edit")' Icon="@Icons.Material.Filled.Edit" Color="Color.Dark" Overlap="true" Bordered="true" Class="ml-2" Style="cursor: hover;">
+                            <MudAvatar Color="Color.Primary" Style="height: 90px; width: 90px; border: 2px solid white; box-shadow: 0px 4px 10px rgba(0,0,0,0.1);">
+                                @if (!string.IsNullOrEmpty(_previewImageUrl))
+                                {
+                                    <MudImage Src="@_previewImageUrl" ObjectFit="ObjectFit.Cover" />
+                                }
+                                else
+                                {
+                                    <MudText Style="text-transform: capitalize" Typo="Typo.h4">@(@context.User.Identity?.Name!.FirstOrDefault() ?? '?')</MudText>
+                                }
+                            </MudAvatar>
+                        </MudBadge>
+
+                        <MudStack Spacing="0">
+                            <MudText Typo="Typo.h6" Style="font-weight: 700; color: white;">@context.User.Identity?.Name!</MudText>
+                            <MudText Typo="Typo.caption" Style="line-height: 1.2; max-width: 200px; font-weight: 500; color: white;">
+                                @(_profile?.Bio ?? "Ingen biografi tillagd ännu.")
+                            </MudText>
+                        </MudStack>
+                    </Authorized>
+                </AuthorizeView>
+            
+            </MudStack>
+        </div>
+
+        <MudPaper Elevation="1" Class="mx-4 pa-2 rounded-lg" Style="margin-top: -35px; position: relative; z-index: 2; border: 1px solid #e2e8f0;">
+            <MudGrid Spacing="0" Class="text-center align-center">
+                <MudItem xs="4">
+                    <MudStack Spacing="0" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.SetMeal" Size="Size.Large" Style="color: #4a5568;" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">@_userProfile.Catches</MudText>
+                        <MudText Typo="Typo.caption" Style="color: #718096;">Fångster</MudText>
+                    </MudStack>
+                </MudItem>
+                
+                <MudItem xs="4" Style="border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
+                    <MudStack Spacing="0" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.Scale" Size="Size.Large" Style="color: #4a5568;" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">@_userProfile.TotalWeight</MudText>
+                        <MudText Typo="Typo.caption" Style="color: #718096;">Total vikt</MudText>
+                    </MudStack>
+                </MudItem>
+                
+                <MudItem xs="4">
+                    <MudStack Spacing="0" AlignItems="AlignItems.Center">
+                        <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Size="Size.Large" Style="color: #4a5568;" />
+                        <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">@_userProfile.Places</MudText>
+                        <MudText Typo="Typo.caption" Style="color: #718096;">Platser</MudText>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudGrid Spacing="2" Class="px-4 mt-3">
+            <MudItem xs="3">
+                <a href="profile/edit">
+                    <MudPaper Elevation="2" Class="pa-2 d-flex flex-column align-center justify-center rounded-lg"
+                              Style="border: 1px solid #e2e8f0; aspect-ratio: 1/1; cursor: pointer;">
+                        <MudIcon Icon="@Icons.Material.Filled.PersonOutline" Size="Size.Large" Class="mb-1" Style="color: #4a5568;" />
+                        <MudText Typo="Typo.caption" Align="Align.Center" Style="line-height: 1.1; font-weight: 500; font-size: 0.65rem;">
+                            Mina uppgifter
+                        </MudText>
+                    </MudPaper>
+                </a>
+            </MudItem>
+            <MudItem xs="3">
+                <a href="/FishingLure">
+                    <MudPaper Elevation="2" Class="pa-2 d-flex flex-column align-center justify-center rounded-lg"
+                              Style="border: 1px solid #e2e8f0; aspect-ratio: 1/1; cursor: pointer;">
+                        <MudIcon Icon="@Icons.Material.Filled.Phishing" Size="Size.Large" Class="mb-1" Style="color: #4a5568;" />
+                        <MudText Typo="Typo.caption" Align="Align.Center" Style="line-height: 1.1; font-weight: 500; font-size: 0.65rem;">
+                            Fiskedrag
+                        </MudText>
+                    </MudPaper>
+                </a>
+            </MudItem>
+            <MudItem xs="3">
+                <a href="savedSpots">
+                    <MudPaper Elevation="2" Class="pa-2 d-flex flex-column align-center justify-center rounded-lg"
+                              Style="border: 1px solid #e2e8f0; aspect-ratio: 1/1; cursor: pointer;">
+                        <MudIcon Icon="@Icons.Material.Filled.LocationOn" Size="Size.Large" Class="mb-1" Style="color: #4a5568;" />
+                        <MudText Typo="Typo.caption" Align="Align.Center" Style="line-height: 1.1; font-weight: 500; font-size: 0.65rem;">
+                            Favoritplatser
+                        </MudText>
+                    </MudPaper>
+                </a>
+            </MudItem>
+            <MudItem xs="3">
+                <a href="/FishList">
+                    <MudPaper Elevation="2" Class="pa-2 d-flex flex-column align-center justify-center rounded-lg"
+                              Style="border: 1px solid #e2e8f0; aspect-ratio: 1/1; cursor: pointer;">
+                        <MudIcon Icon="@Icons.Material.Filled.SetMeal" Size="Size.Large" Class="mb-1" Style="color: #4a5568;" />
+                        <MudText Typo="Typo.caption" Align="Align.Center" Style="line-height: 1.1; font-weight: 500; font-size: 0.65rem;">
+                            Fiskearter
+                        </MudText>
+                    </MudPaper>
+                </a>
+            </MudItem>
+        </MudGrid>
+
+        <MudPaper Elevation="1" Class="mx-4 mt-5 pa-4 rounded-lg" Style="border: 1px solid #e2e8f0;">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudText Typo="Typo.subtitle1" Style="font-weight: 700;">Senaste aktivitet</MudText>
+                <MudText Typo="Typo.caption" Style="color: #007bb5; font-weight: 600; cursor: pointer;" @onclick="GoToMyCatches">Visa alla</MudText>
+            </MudStack>
+
+            <MudStack Spacing="3">
+                @if (_userProfile.RecentActivites.Any())
+                {
+                    @foreach (var activity in _userProfile.RecentActivites)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="w-100 cursor-pointer">
+                            @if (!string.IsNullOrEmpty(activity.ImageUrl))
+                            {
+                                <MudImage Src="@activity.ImageUrl" ObjectFit="ObjectFit.Cover" Width="70" Height="45" Class="rounded" />
+                            }
+
+                            <MudStack Spacing="0" Class="flex-grow-1">
+                                <MudText Typo="Typo.body2" Style="font-weight: 700;">@activity.FishSpeciesName</MudText>
+                                <MudText Typo="Typo.caption" Style="color: #718096;">
+                                    @activity.Weight kg • @activity.LocationName
+                                </MudText>
+                            </MudStack>
+
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudText Typo="Typo.caption" Style="color: #4a5568; font-weight: 500;">@activity.CatchDate.ToString("yyyy-MM-dd")</MudText>
+                                <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" Style="color: #a0aec0;" />
+                            </MudStack>
+                        </MudStack>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Inga aktiviteter hittades.</MudText>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+    else
+    {
+        <MudAlert Severity="Severity.Error">Kunde inte hämta profilsidan</MudAlert>
+    }
+</MudContainer>
+
+@code {
+    private bool _isLoading = true;
+    private UserStatsDTO? _userProfile;
+    private ProfileDTO? _profile;
+    private string? _previewImageUrl;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _profile = await ProfileService.GetProfileAsync();
+            _userProfile = await ProfileService.GetProfileStatsAsync();
+
+            if (_profile != null)
+            {
+                _previewImageUrl = _profile.ProfilePictureUrl;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void GoToMyCatches()
+    {
+        Navigation.NavigateTo("/my-catches");
+    }
+}

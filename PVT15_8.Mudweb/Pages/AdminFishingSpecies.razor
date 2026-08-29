@@ -1,0 +1,203 @@
+@page "/admin/species"
+@using PVT15_8.Shared.DTOs
+@attribute [Authorize(Roles = "Admin")]
+@inject AdminService AdminService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" GutterBottom="true">Manage Fish Species</MudText>
+
+    @if (isLoading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        @if (isEditing)
+        {
+            <MudPaper Elevation="3" Class="pa-4 mb-4">
+                <MudText Typo="Typo.h6">@(editingId == 0 ? "Add New Species" : "Edit Species")</MudText>
+                <MudForm @ref="form" IsValid="@isValid">
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="speciesModel.Name" Label="Name" Required="true" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="speciesModel.Description" Label="Description" Variant="Variant.Outlined" />
+                        </MudItem>
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.subtitle2" Class="mb-2">Species Image</MudText>
+                            <div class="d-flex gap-2 align-center">
+                                <MudButton Variant="Variant.Outlined" OnClick="UploadImage">Upload Image</MudButton>
+                                @if (!string.IsNullOrEmpty(speciesModel.ImageBase64))
+                                {
+                                    <MudImage Src="@($"data:image/jpeg;base64,{speciesModel.ImageBase64}")" Height="80" Width="80" Style="object-fit: cover; border-radius: 8px;" />
+                                    <MudButton Variant="Variant.Text" Color="Color.Error" OnClick="RemoveImage">Remove</MudButton>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.caption">No image selected</MudText>
+                                }
+                            </div>
+                        </MudItem>
+                        <MudItem xs="12" Class="d-flex justify-end gap-2">
+                            <MudButton Variant="Variant.Text" OnClick="CancelEdit">Cancel</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAsync">Save</MudButton>
+                        </MudItem>
+                    </MudGrid>
+                </MudForm>
+            </MudPaper>
+        }
+
+        <MudTable Items="@speciesList" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@isLoading">
+            <ToolBarContent>
+                <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Add" OnClick="AddNew">Add Species</MudButton>
+            </ToolBarContent>
+            <HeaderContent>
+                <MudTh>ID</MudTh>
+                <MudTh>Image</MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Description</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="ID">@context.Id</MudTd>
+                <MudTd DataLabel="Image">
+                    @if (!string.IsNullOrEmpty(context.ImageUrl))
+                    {
+                        <MudImage Src="@($"data:image/jpeg;base64,{context.ImageUrl}")" Height="50" Width="50" Style="object-fit: cover; border-radius: 4px;" />
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.Image" Color="Color.Default" Size="Size.Small" />
+                    }
+                </MudTd>
+                <MudTd DataLabel="Name">@context.Name</MudTd>
+                <MudTd DataLabel="Description">@context.Description</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" OnClick="@(() => Edit(context))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" OnClick="@(() => DeleteAsync(context.Id))" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudContainer>
+
+@code {
+    private bool isLoading = true;
+    private bool isEditing = false;
+    private bool isValid;
+    private MudForm? form;
+    private DotNetObjectReference<AdminFishingSpecies>? dotNetRef;
+
+    private List<FishSpeciesDTO> speciesList = [];
+    private int editingId = 0;
+    private SpeciesViewModel speciesModel = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        dotNetRef = DotNetObjectReference.Create(this);
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        isLoading = true;
+        speciesList = await AdminService.GetFishSpeciesAsync();
+        isLoading = false;
+    }
+
+    private void AddNew()
+    {
+        editingId = 0;
+        speciesModel = new SpeciesViewModel();
+        isEditing = true;
+    }
+
+    private void Edit(FishSpeciesDTO species)
+    {
+        editingId = species.Id;
+        speciesModel = new SpeciesViewModel
+        {
+            Name = species.Name,
+            Description = species.Description,
+            ImageBase64 = species.ImageUrl
+        };
+        isEditing = true;
+    }
+
+    private void CancelEdit()
+    {
+        isEditing = false;
+    }
+
+    private async Task UploadImage()
+    {
+        await JSRuntime.InvokeVoidAsync("cameraHelper.chooseFromGallery", dotNetRef);
+    }
+
+    [JSInvokable]
+    public void OnImageSelected(string base64Data, string fileName, string contentType)
+    {
+        speciesModel.ImageBase64 = base64Data;
+        StateHasChanged();
+    }
+
+    private void RemoveImage()
+    {
+        speciesModel.ImageBase64 = null;
+        StateHasChanged();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (form is null) return;
+        await form.ValidateAsync();
+        if (!form.IsValid) return;
+
+        var request = new RequestFishSpeciesDTO
+        {
+            Name = speciesModel.Name,
+            Description = speciesModel.Description,
+            ImageUrl = speciesModel.ImageBase64
+        };
+
+        bool isNew = editingId == 0;
+        bool success = isNew
+            ? await AdminService.PostFishSpeciesAsync(request)
+            : await AdminService.PutFishSpeciesAsync(editingId, request);
+
+        if (success)
+        {
+            Snackbar.Add(isNew ? "Species created successfully" : "Species updated successfully", Severity.Success);
+            isEditing = false;
+            await LoadDataAsync();
+        }
+        else
+        {
+            Snackbar.Add(isNew ? "Failed to create species" : "Failed to update species", Severity.Error);
+        }
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        var success = await AdminService.DeleteFishSpeciesAsync(id);
+        if (success)
+        {
+            Snackbar.Add("Species deleted successfully", Severity.Info);
+        }
+        else
+        {
+            Snackbar.Add("Failed to delete species", Severity.Error);
+        }
+        await LoadDataAsync();
+    }
+
+    private class SpeciesViewModel
+    {
+        public string Name { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string? ImageBase64 { get; set; }
+    }
+}

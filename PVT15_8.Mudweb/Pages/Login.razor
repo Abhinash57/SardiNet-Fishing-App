@@ -1,0 +1,157 @@
+﻿@page "/"
+@using Microsoft.AspNetCore.Components.Authorization
+@inject FishApiClient fishApiClient;
+@inject HttpClient Http
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+
+<PageTitle>Login</PageTitle>
+
+<MudContainer Class="px-0" MaxWidth="MaxWidth.ExtraSmall">
+    <div style="height: 100dvh; display: flex; background-image: url('/Bakgrundsbild_login.png'); background-size: cover; background-position: center; background-repeat: no-repeat; flex-direction: column; justify-content: space-between;">
+
+        <MudImage Src="/Logga.png" Alt="logo" Width="200" Style="align-self: center; padding-bottom: 20px;"></MudImage>
+
+        <MudText Typo="Typo.h5" Style="align-self: center; text-shadow: 0px 0px 3px white; color: black;">
+            Välkommen tillbaka
+        </MudText>
+
+        <MudText Typo="Typo.body1" Style="align-self: center; margin-bottom: 5%; text-shadow: 0px 0px 3px white; color: black;">
+            Logga in för att fortsätta ditt fiskeäventyr
+        </MudText>
+
+        <MudPaper Elevation="4" Style="border-top-left-radius: 10%; border-top-right-radius: 10%; justify-content:flex-end;">
+            <div style="padding-left: 8%; padding-right: 8%; padding-top: 8%; padding-bottom: 8%;">
+                <MudText>E-mail</MudText>
+                <MudTextField @bind-Value="_model.Email" T="string" Variant="Variant.Outlined" Class="mb-3" />
+
+                <MudText>Password</MudText>
+                <MudTextField @bind-Value="_model.Password" T="string" Variant="Variant.Outlined"
+                              InputType="@(passwordIsVisible ? InputType.Text : InputType.Password)" Class="mb-4"
+                              AdornmentIcon="@(passwordIsVisible ? Icons.Material.Filled.Visibility : Icons.Material.Filled.VisibilityOff)"
+                              OnAdornmentClick="TogglePassword" Adornment="Adornment.End" />
+
+                @if (!string.IsNullOrEmpty(_errorMessage))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mt-4 mb-4">@_errorMessage</MudAlert>
+                }
+
+
+                <div style="display: flex; justify-content: center; padding-left: 20%; padding-right: 20%;">
+                    <MudButton Variant="Variant.Filled" FullWidth="true"
+                               Style="text-transform: none; background-color: #3e79c7; color: white; border-radius: 12px;"
+                               OnClick="HandleLogin" Class="mb-4 mt-4" EndIcon="@Icons.Material.Filled.ArrowForward"
+                               Disabled="@_isProcessing">
+                        @if (_isProcessing)
+                        {
+                            <MudProgressCircular Class="ms-n1" Size="Size.Small" Indeterminate="true" />
+                            <MudText Class="ms-2">Loggar in...</MudText>
+                        }
+                        else
+                        {
+                            <MudText>Logga in</MudText>
+                        }
+                    </MudButton>
+                </div>
+
+                <div style="display: flex; justify-content: center;">
+                    <MudText Style="margin-right: 5px; margin-top: 2px;">Har du inget konto?</MudText>
+                    <MudLink Style="color:#3e79c7; text-transform: none; margin-top: 2px;" OnClick="SendToRegister" Class="mb-4">
+                        Skapa Konto
+                    </MudLink>
+                </div>
+            </div>
+        </MudPaper>
+
+    </div>
+</MudContainer>
+
+<style>
+    html,
+    body {
+        margin: 0;
+        padding: 0;
+    }
+
+    .mud-main-content {
+        padding: 0;
+    }
+</style>
+
+@code {
+    private LoginRequest _model = new();
+    private bool _isProcessing;
+    private string? _errorMessage;
+
+    private bool passwordIsVisible;
+    private bool rememberMe;
+
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationStateTask { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationStateTask is not null)
+        {
+            var authState = await AuthenticationStateTask;
+            var user = authState.User;
+
+            if (user.Identity is { IsAuthenticated: true })
+            {
+                Navigation.NavigateTo("/Home");
+            }
+        }
+    }
+
+    private async Task HandleLogin()
+    {
+        _isProcessing = true;
+        _errorMessage = null;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("identity/login?useCookies=true", _model);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var customAuthStateProvider = (IdentityAuthenticationStateProvider)AuthStateProvider;
+                customAuthStateProvider.MarkUserAsAuthenticated();
+
+                Navigation.NavigateTo("/Home");
+            }
+            else
+            {
+                _errorMessage = "Invalid login attempt. Please check your credentials.";
+            }
+        }
+        catch
+        {
+            _errorMessage = "A connection error occurred.";
+        }
+        finally
+        {
+            _isProcessing = false;
+        }
+    }
+
+    public class LoginRequest
+    {
+        public string Email { get; set; } = "user@test.g";
+        public string Password { get; set; } = "Hej123!";
+    }
+
+    private void SendToRegister()
+    {
+        Navigation.NavigateTo("/Register");
+    }
+
+    private void TogglePassword()
+    {
+        passwordIsVisible = !passwordIsVisible;
+    }
+
+    private void ToggleCheckbox()
+    {
+        rememberMe = !rememberMe;
+    }
+}
